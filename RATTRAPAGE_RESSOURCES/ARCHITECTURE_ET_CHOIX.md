@@ -553,20 +553,25 @@ async def kafka_consumer_loop():
     retry_delay = 2
     while True:
         try:
-            async for msg in consumer:
-                if msg.value["type"] == "turn_played":
-                    notif = create_bot_notification(msg.value)
-                    await chat_service.broadcast_all(notif)
+            async for msg in consumer:  # S'abonne à : battle-events + chat-messages
+                topic = msg.topic
+                event = msg.value
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    if event.get("type") == "turn_played":
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        notif = {"author": "bot", "content": f"Tour {turn} — {winner} remporte le tour !", "is_bot": True}
+                        await chat_service.broadcast_all(notif)
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)
+                    else:
+                        await chat_service.broadcast_all(event)
         except Exception:
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 30)  # Exponential backoff
-
-# chat_service/app/services/chat_service.py
-async def broadcast_all(message):
-    # Envoie à TOUS les WebSocket connectés
-    for room in active_connections:
-        for ws in active_connections[room]:
-            await ws.send_json(message)
 ```
 
 ---
@@ -723,17 +728,27 @@ async def play_turn(battle_id, payload):
     # 4. Retourner immédiatement (ne pas attendre chat_service)
     return turn  # ✅ Battle continue sans attendre chat
 
-# chat_service (Consumer)
+# chat_service (Consumer) — écoute 2 topics
 async def kafka_consumer_loop():
     while True:
         try:
-            async for msg in consumer:
+            async for msg in consumer:  # topics: battle-events + chat-messages
                 event = msg.value
-                if event["type"] == "turn_played":
-                    # Créer notification
-                    notif = f"Tour {event['turn_number']} — Rouge gagne !"
-                    # Broadcast à tous les WebSocket
-                    await chat_service.broadcast_all(notif)
+                topic = msg.topic
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    if event.get("type") == "turn_played":
+                        # Créer notification
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        notif = {"author": "bot", "content": f"Tour {turn} — {winner} remporte le tour !", "is_bot": True}
+                        await chat_service.broadcast_all(notif)
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)
+                    else:
+                        await chat_service.broadcast_all(event)
         except Exception:
             # Retry avec exponential backoff
             await asyncio.sleep(retry_delay)
@@ -755,7 +770,7 @@ response = await httpx.post("http://chat-service/notify", json=data)
 **✅ Avec Kafka (asynchrone) :**
 ```python
 # battle_service publie et continue immédiatement
-await kafka_producer.send("turn_played", data)
+await publish_battle_event("turn_played", data)
 # Avantages :
 # 1. Si chat down → Kafka stocke, consomme plus tard
 # 2. Battle ne ralentit pas (publish = 1-2ms)
