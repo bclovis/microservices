@@ -15,28 +15,26 @@
 
 **Fichier :** `api/battle_service/app/services/battle_engine.py`
 
-### Le code complet
+### Le code réel soumis
 
 ```python
+# F(A) = somme sur chaque type de A du produit des multis contre chaque type de B
+# Conformément à la formule : F(A) = 1*(W/Y)*(W/Z) + 1*(X/Y)*(X/Z)
 def calc_advantage(types_a, types_b):
     if not types_a or not types_b:
         return 0.0, 0.0
 
-    # Si 1 seul type → on le compte 2 fois
-    ta = types_a if len(types_a) == 2 else [types_a[0], types_a[0]]
-    tb = types_b if len(types_b) == 2 else [types_b[0], types_b[0]]
-
     fa = 0.0
-    for w in ta:           # Pour chaque type de A
+    for w in types_a:      # Pour chaque type de A
         val = 1.0
-        for y in tb:       # Contre chaque type de B
+        for y in types_b:  # Contre chaque type de B
             val *= get_multiplier(w, y)
         fa += val
 
     fb = 0.0
-    for y in tb:
+    for y in types_b:      # Pour chaque type de B
         val = 1.0
-        for w in ta:
+        for w in types_a:  # Contre chaque type de A
             val *= get_multiplier(y, w)
         fb += val
 
@@ -45,53 +43,38 @@ def calc_advantage(types_a, types_b):
 
 ### Ce que ça fait étape par étape
 
-**Étape 1 : Normalisation des types**
+**Exemple : Dracaufeu [Feu, Vol] vs Bulbizarre [Plante, Poison]**
+
 ```
-Pokémon A = ["Feu"]      → ta = ["Feu", "Feu"]   (dupliqué)
-Pokémon B = ["Plante", "Sol"]  → tb = ["Plante", "Sol"]  (déjà 2 types)
-```
+Calcul de F(A) — score de Dracaufeu contre Bulbizarre :
+  w=Feu  : val = get_multiplier(Feu, Plante) × get_multiplier(Feu, Poison)
+           val = 2.0 × 1.0 = 2.0  →  fa += 2.0
+  w=Vol  : val = get_multiplier(Vol, Plante) × get_multiplier(Vol, Poison)
+           val = 2.0 × 1.0 = 2.0  →  fa += 2.0
+  → fa = 4.0
 
-**Étape 2 : Calcul de F(A) = score de A contre B**
-```
-Pour type "Feu" de A :
-    val = get_multiplier("Feu", "Plante") × get_multiplier("Feu", "Sol")
-    val = 2.0 × 2.0 = 4.0
-    fa += 4.0
+Calcul de F(B) — score de Bulbizarre contre Dracaufeu :
+  y=Plante : val = get_multiplier(Plante, Feu) × get_multiplier(Plante, Vol)
+             val = 0.5 × 0.5 = 0.25  →  fb += 0.25
+  y=Poison : val = get_multiplier(Poison, Feu) × get_multiplier(Poison, Vol)
+             val = 1.0 × 1.0 = 1.0   →  fb += 1.0
+  → fb = 1.25
 
-Pour type "Feu" de A (encore, car dupliqué) :
-    val = 2.0 × 2.0 = 4.0
-    fa += 4.0
-
-→ fa = 8.0
-```
-
-**Étape 3 : Calcul de F(B) = score de B contre A**
-```
-Pour type "Plante" de B :
-    val = get_multiplier("Plante", "Feu") × get_multiplier("Plante", "Feu")
-    val = 0.5 × 0.5 = 0.25
-    fb += 0.25
-
-Pour type "Sol" de B :
-    val = get_multiplier("Sol", "Feu") × get_multiplier("Sol", "Feu")
-    val = 2.0 × 2.0 = 4.0
-    fb += 4.0
-
-→ fb = 4.25
+→ fa(4.0) > fb(1.25) → A (Rouge) gagne ce tour
 ```
 
-**Résultat :** F(A) = 8.0 > F(B) = 4.25 → **A (Rouge) gagne ce tour**
+### Lire le commentaire de la formule
 
----
+Le commentaire dit : `F(A) = 1*(W/Y)*(W/Z) + 1*(X/Y)*(X/Z)`
+- W, X = types du Pokémon A
+- Y, Z = types du Pokémon B
+- `(W/Y)` = `get_multiplier(W, Y)` (notation maison = efficacité du type W contre Y)
 
-### Pourquoi dupliquer le type si 1 seul ?
+### ⚠️ Point important sur les monotypes
 
-**Ce qu'il faut dire (du rapport) :**
-> *"Pour éviter qu'un Pokémon avec un seul type soit désavantagé, on considère son type deux fois dans le calcul."*
+> "Dans cette version du code, si un Pokémon est monotype (`["Feu"]`), la boucle ne fait qu'une itération : F(A) a un seul terme. La formule s'applique aux types disponibles sans ajustement particulier."
 
-**Exemple concret :**
-- Sans duplication : Pokémon mono-type a 1 interaction, bi-type en a 4 → déséquilibre
-- Avec duplication : les deux ont toujours 4 interactions → comparaison équitable
+Si on te pose une question là-dessus, tu dis : *"On a implémenté la formule telle quelle, en itérant sur les types disponibles du Pokémon."*
 
 ---
 
