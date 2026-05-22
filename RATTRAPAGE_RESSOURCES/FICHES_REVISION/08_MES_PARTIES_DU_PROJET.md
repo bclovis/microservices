@@ -17,23 +17,19 @@ def calc_advantage(types_a, types_b):
     if not types_a or not types_b:
         return 0.0, 0.0
 
-    # Si le Pokémon a 1 seul type, on le compte DEUX fois
-    ta = types_a if len(types_a) == 2 else [types_a[0], types_a[0]]
-    tb = types_b if len(types_b) == 2 else [types_b[0], types_b[0]]
-
     # Calcul du score de A contre B
     fa = 0.0
-    for w in ta:        # Pour chaque type de A
+    for w in types_a:      # Pour chaque type de A
         val = 1.0
-        for y in tb:    # Contre chaque type de B
+        for y in types_b:  # Contre chaque type de B
             val *= get_multiplier(w, y)   # Multiplie les effets
-        fa += val       # Somme
+        fa += val          # Somme
 
     # Calcul du score de B contre A (symétrique)
     fb = 0.0
-    for y in tb:
+    for y in types_b:
         val = 1.0
-        for w in ta:
+        for w in types_a:
             val *= get_multiplier(y, w)
         fb += val
 
@@ -46,13 +42,14 @@ def calc_advantage(types_a, types_b):
 - `get_multiplier("Feu", "Plante")` renvoie `2.0` (Feu fort contre Plante)
 
 **Exemple concret :**
-- Pokémon A = `["Feu"]` → doublé en `["Feu", "Feu"]`
-- Pokémon B = `["Plante", "Sol"]`
-- F(A) = Feu×Plante × Feu×Sol = 2.0 × 2.0 = 4.0 → A très fort
-- F(B) = Plante×Feu × Sol×Feu = 0.5 × 2.0 = 1.0 → B moins fort
+- Pokémon A = `["Feu"]`, Pokémon B = `["Plante", "Sol"]`
+- F(A) : w="Feu" → get_multiplier("Feu","Plante")×get_multiplier("Feu","Sol") = 2.0×2.0 = 4.0
+- F(B) : y="Plante" → get_multiplier("Plante","Feu") = 0.5 ; y="Sol" → get_multiplier("Sol","Feu") = 2.0
+  fb = 0.5 + 2.0 = 2.5
+- F(A) = 4.0 > F(B) = 2.5 → A gagne
 
-**Pourquoi dupliquer le type si 1 seul ?**
-> "Pour éviter de désavantager les Pokémon mono-types. Sans ça, un Pokémon à 2 types aurait toujours un score plus élevé juste parce qu'il a plus d'interactions."
+**Avantage de la double boucle :**
+> "On itère sur tous les types de l'attaquant contre tous les types du défenseur. Ça fonctionne naturellement avec 1, 2 ou plus de types, sans logique spéciale pour les mono-types."
 
 ---
 

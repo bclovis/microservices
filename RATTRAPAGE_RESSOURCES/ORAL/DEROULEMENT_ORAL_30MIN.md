@@ -47,7 +47,7 @@ Il va choisir **UN sujet** et creuser :
 
 **Bonne réponse :**
 1. Nouveau microservice `notification_service`
-2. S'abonne au topic Kafka `battle.events`
+2. S'abonne au topic Kafka `battle-events`
 3. Envoie un email quand bataille terminée
 4. Base de données séparée pour l'historique des notifications
 

@@ -324,7 +324,7 @@ Si temps restant → GUIDE_DEFENSE_ORAL.md (partie battle/chat)
 **FICHE 4 - Points critiques :**
 - Sync vs Async (REST vs Kafka)
 - Producer/Consumer
-- Topics (ex: "battle.events")
+- Topics (ex: "battle-events")
 - Retry avec exponential backoff
 
 **Après-midi (2h) :**
@@ -343,7 +343,7 @@ async def kafka_consumer_loop():
     retry_delay = 2  # Commence à 2 secondes
     while True:     # Boucle infinie (lifespan)
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,  # "battle.events"
+            settings.KAFKA_TOPIC_BATTLE,  # "battle-events"
             bootstrap_servers=...
         )
         try:
@@ -446,7 +446,7 @@ services:
       - kafka
     environment:
       DATABASE_URL: postgresql://...
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
   chat-service:
     build: ./chat_service

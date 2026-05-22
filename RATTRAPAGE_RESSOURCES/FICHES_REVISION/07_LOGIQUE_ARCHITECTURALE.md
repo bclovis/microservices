@@ -129,7 +129,7 @@ Cette fiche t'apprend **COMMENT PENSER** face aux questions de l'oral, pas juste
 **Question à te poser :** D'où viennent les infos dont il a besoin ?
 
 **Réponse :**
-- Événements de bataille → topic Kafka `battle.events`
+- Événements de bataille → topic Kafka `battle-events`
 - Infos utilisateur → REST call vers auth_service (pour récupérer l'email)
 
 ---
@@ -174,7 +174,7 @@ notification_service/
 
 **Réponse :**
 1. Créer le service vide avec consumer Kafka de base
-2. S'abonner au topic `battle.events`
+2. S'abonner au topic `battle-events`
 3. Parser les events et extraire les infos (battle_id, winner, loser)
 4. Appeler auth_service pour récupérer les emails des joueurs
 5. Envoyer l'email via SMTP (SendGrid, Mailgun, etc.)
@@ -202,7 +202,7 @@ notification_service/
 **ÉTAPE 1 :** Rôle → Calculer des stats (nb de batailles par user, taux de victoire, etc.)
 
 **ÉTAPE 2 :** Sources → 
-- Events Kafka `battle.events` (pour collecter les données)
+- Events Kafka `battle-events` (pour collecter les données)
 - Ou REST vers battle_service pour récupérer l'historique
 
 **ÉTAPE 3 :** Comm → Asynchrone (Kafka) pour la collecte en temps réel
@@ -220,7 +220,7 @@ stats_service/
 ```
 
 **ÉTAPE 5 :** Implémentation →
-1. Consumer Kafka écoute `battle.events`
+1. Consumer Kafka écoute `battle-events`
 2. À chaque event, met à jour `user_stats` (incrémente nb_battles, calcule win_rate)
 3. Endpoint REST pour récupérer les stats d'un user
 
@@ -324,7 +324,7 @@ producer = AIOKafkaProducer(
 # battle_service/app/kafka_producer.py
 async def publish_battle_event(event_type: str, data: dict):
     logger.info(f"Publishing event: {event_type} - {data}")  # <-- ICI
-    await producer.send("battle.events", ...)
+    await producer.send("battle-events", ...)
 
 # chat_service/app/main.py
 async for msg in consumer:

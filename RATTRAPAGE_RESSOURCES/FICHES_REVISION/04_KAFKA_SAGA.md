@@ -66,7 +66,7 @@ def handle_order(event):
 │                  │ → PUBLIER event Kafka
 └──────────────────┘
          │
-         │ [battle.events] topic
+         │ [battle-events] topic
          │ event: "turn_played"
          ▼
 ┌──────────────────┐
@@ -121,7 +121,7 @@ async def kafka_consumer_loop():
     retry_delay = 2  # Retry exponential backoff
     while True:
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,  # "battle.events"
+            settings.KAFKA_TOPIC_BATTLE,  # "battle-events"
             bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         )

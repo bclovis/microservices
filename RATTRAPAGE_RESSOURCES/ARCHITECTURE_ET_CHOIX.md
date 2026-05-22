@@ -191,7 +191,7 @@ async def handle_payment_failed(event):
 │                 │   3. Publie "turn_played" sur Kafka
 └─────────────────┘
          │
-         │ Kafka topic: "battle.events"
+         │ Kafka topic: "battle-events"
          │ Message: {"type": "turn_played", "result": "A", "turn_number": 3}
          ▼
 ┌─────────────────┐
@@ -813,7 +813,7 @@ async def chat_endpoint(websocket: WebSocket, team: str):
             message = json.loads(data)
             
             # Publier sur Kafka (pour persistance)
-            await kafka_producer.send("chat.messages", message)
+            await kafka_producer.send("chat-messages", message)
             
             # Broadcast à tous les WebSocket de cette team
             await chat_service.broadcast(team, message)

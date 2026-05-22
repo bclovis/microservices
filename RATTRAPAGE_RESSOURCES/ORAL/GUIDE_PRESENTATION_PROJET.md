@@ -362,43 +362,38 @@ def recommend_pokemon(team_pokemons: List[TeamPokemon]) -> List[dict]:
 
 1. **Créer une bataille** (Draft/Constructed/Random mode)
 2. **Engine de combat** : Calculer F(A) pour chaque tour
-3. **Publier événements Kafka** : battle.started, turn.played, battle.ended
-4. **Gérer l'état de la bataille** : tours, HP, Pokémon actifs
+3. **Publier événements Kafka** : `battle-events` topic
+4. **Gérer l'état de la bataille** : tours, résultats, winner
 
 #### Code clé : Formule F(A)
 
 ```python
-def calculate_advantage(attacker_types: List[str], defender_types: List[str]) -> float:
+def calc_advantage(types_a: list[str], types_b: list[str]) -> tuple[float, float]:
     """
-    Calcule F(A) = 1 * (W/Y) * (W/Z) + 1 * (X/Y) * (X/Z)
-    W, X = types de l'attaquant
-    Y, Z = types du défenseur
+    Double boucle : pour chaque type w de A, multiplie get_multiplier(w,y)
+    pour chaque type y de B, puis additionne — c'est fa.
+    Même chose en sens inverse pour fb.
+    Fonctionne avec 1 ou 2 types sans logique spéciale.
     """
-    type_effectiveness = {
-        "fire": {"grass": 2.0, "water": 0.5, "fire": 0.5},
-        "water": {"fire": 2.0, "grass": 0.5, "water": 0.5},
-        "grass": {"water": 2.0, "fire": 0.5, "grass": 0.5},
-        "electric": {"water": 2.0, "flying": 2.0, "ground": 0.0},
-        # ... (table complète)
-    }
-    
-    W = attacker_types[0] if len(attacker_types) > 0 else "normal"
-    X = attacker_types[1] if len(attacker_types) > 1 else attacker_types[0]
-    Y = defender_types[0]
-    Z = defender_types[1] if len(defender_types) > 1 else defender_types[0]
-    
-    # Calculer les multiplicateurs
-    W_Y = type_effectiveness.get(W, {}).get(Y, 1.0)
-    W_Z = type_effectiveness.get(W, {}).get(Z, 1.0)
-    X_Y = type_effectiveness.get(X, {}).get(Y, 1.0)
-    X_Z = type_effectiveness.get(X, {}).get(Z, 1.0)
-    
-    F_A = 1 * W_Y * W_Z + 1 * X_Y * X_Z
-    return F_A
+    if not types_a or not types_b:
+        return 0.0, 0.0
+    fa = 0.0
+    for w in types_a:
+        val = 1.0
+        for y in types_b:
+            val *= get_multiplier(w, y)
+        fa += val
+    fb = 0.0
+    for y in types_b:
+        val = 1.0
+        for w in types_a:
+            val *= get_multiplier(y, w)
+        fb += val
+    return round(fa, 4), round(fb, 4)
 ```
 
 **À expliquer :**
-> "battle_service implémente le moteur de combat. On utilise la formule F(A) qui calcule l'avantage en fonction des types. Par exemple, si Pikachu (electric) attaque Gyarados (water/flying), electric est super efficace contre water (2x) et flying (2x), donc F(A) = 1 * 2 * 2 + 1 * 2 * 2 = 8. C'est un avantage énorme. À chaque tour, on publie un événement Kafka pour que chat_service puisse afficher le résultat en temps réel."
+> "battle_service implémente le moteur de combat. On utilise la formule F(A) qui calcule l'avantage en fonction des types avec une double boucle. Par exemple, si Pikachu (Électrik) attaque Gyarados (Eau/Vol) : F(A) = get_multiplier(Électrik,Eau) × get_multiplier(Électrik,Vol) = 2.0 × 2.0 = 4.0. À chaque tour, on publie un événement Kafka sur le topic `battle-events` pour que chat_service puisse afficher le résultat en temps réel via WebSocket."
 
 ---
 
@@ -427,34 +422,23 @@ def get_pokemon_info(pokemon_id: int):
 **Exemple : battle_service → chat_service**
 
 ```python
-# battle_service publie un événement
-from kafka import KafkaProducer
+# battle_service publie un événement (aiokafka)
+from app.services.kafka_service import publish_battle_event
 
-producer = KafkaProducer(bootstrap_servers=['kafka:9092'])
+await publish_battle_event("turn_played", {
+    "battle_id": str(battle_id),
+    "turn_number": turn_number,
+    "result": result,    # "A", "B" ou "draw"
+})
+# → envoyé sur settings.KAFKA_TOPIC_BATTLE = "battle-events"
 
-def publish_turn_played(battle_id, attacker, defender, damage):
-    event = {
-        "battle_id": battle_id,
-        "attacker": attacker,
-        "defender": defender,
-        "damage": damage,
-        "timestamp": datetime.now().isoformat()
-    }
-    producer.send('turn.played', json.dumps(event).encode())
-
-# chat_service écoute
-from kafka import KafkaConsumer
-
-consumer = KafkaConsumer('turn.played', bootstrap_servers=['kafka:9092'])
-
-for message in consumer:
-    event = json.loads(message.value)
-    # Envoyer via WebSocket au frontend
-    broadcast_to_battle_room(event["battle_id"], event)
+# chat_service écoute (dans kafka_consumer_loop) :
+# AIOKafkaConsumer abonné à settings.KAFKA_TOPIC_BATTLE + settings.KAFKA_TOPIC_CHAT
+# À la réception d'un event "turn_played" → broadcast_all() via WebSocket
 ```
 
 **À expliquer :**
-> "Pour les événements de bataille, on utilise Kafka car c'est asynchrone et garantit la livraison. battle_service publie 'turn.played' après chaque tour. chat_service écoute ce topic et diffuse via WebSocket aux joueurs connectés. Même si chat_service est down pendant quelques secondes, les événements sont mis en file d'attente et seront traités au redémarrage."
+> "Pour les événements de bataille, on utilise Kafka car c'est asynchrone et garantit la livraison. battle_service publie 'turn_played' sur le topic `battle-events` après chaque tour. chat_service a un consumer loop qui écoute ce topic et diffuse via WebSocket aux joueurs connectés. Même si chat_service est down pendant quelques secondes, les événements sont mis en file d'attente et seront traités au redémarrage."
 
 ---
 

@@ -244,69 +244,64 @@ TYPE_CHART = {
 **Fonction calc_advantage()** :
 
 ```python
-def calc_advantage(types_red: list[str], types_blue: list[str]) -> tuple[float, float]:
+def calc_advantage(types_a: list[str], types_b: list[str]) -> tuple[float, float]:
     """
-    Calcule F(A) et F(B) selon la formule :
-    F(A) = 1 * (W/Y) * (W/Z) + 1 * (X/Y) * (X/Z)
-    
-    W, X = types de l'attaquant Rouge
-    Y, Z = types du défenseur Bleu
+    Calcule F(A) et F(B) :
+    Pour chaque type w de A, on multiplie get_multiplier(w, y) pour tous les
+    types y de B, puis on additionne. Même chose en sens inverse pour fb.
+    Fonctionne avec 1, 2 types ou plus — pas de doublement mono-type.
     """
-    def calc_score(attacker_types: list[str], defender_types: list[str]) -> float:
-        # Attaquant : W = premier type, X = deuxième type (ou W si mono-type)
-        W = attacker_types[0] if len(attacker_types) > 0 else "Normal"
-        X = attacker_types[1] if len(attacker_types) > 1 else W
-        
-        # Défenseur : Y = premier type, Z = deuxième type (ou Y si mono-type)
-        Y = defender_types[0]
-        Z = defender_types[1] if len(defender_types) > 1 else Y
-        
-        # Multiplicateurs depuis TYPE_CHART
-        W_Y = TYPE_CHART.get(W, {}).get(Y, 1.0)
-        W_Z = TYPE_CHART.get(W, {}).get(Z, 1.0)
-        X_Y = TYPE_CHART.get(X, {}).get(Y, 1.0)
-        X_Z = TYPE_CHART.get(X, {}).get(Z, 1.0)
-        
-        # Formule F(A)
-        score = 1 * W_Y * W_Z + 1 * X_Y * X_Z
-        return score
-    
-    fa = calc_score(types_red, types_blue)
-    fb = calc_score(types_blue, types_red)
-    return fa, fb
+    if not types_a or not types_b:
+        return 0.0, 0.0
+
+    fa = 0.0
+    for w in types_a:
+        val = 1.0
+        for y in types_b:
+            val *= get_multiplier(w, y)
+        fa += val
+
+    fb = 0.0
+    for y in types_b:
+        val = 1.0
+        for w in types_a:
+            val *= get_multiplier(y, w)
+        fb += val
+
+    return round(fa, 4), round(fb, 4)
 
 
-def resolve_turn(types_red: list[str], types_blue: list[str]) -> str:
+def resolve_turn(types_a: list[str], types_b: list[str]) -> str:
     """Détermine le gagnant du tour"""
-    fa, fb = calc_advantage(types_red, types_blue)
+    fa, fb = calc_advantage(types_a, types_b)
     if fa > fb:
-        return "A"  # Rouge gagne
+        return "A"    # Rouge gagne
     elif fb > fa:
-        return "B"  # Bleu gagne
+        return "B"    # Bleu gagne
     else:
-        return "T"  # Égalité
+        return "draw"  # Égalité
 ```
 
 **Exemple concret** :
 
-Pikachu (Electrik) vs Gyarados (Eau, Vol)
+Pikachu (Électrik) vs Gyarados (Eau, Vol)
 
 ```
-W = Electrik, X = Electrik (mono-type)
-Y = Eau, Z = Vol
+types_a = ["Électrik"],  types_b = ["Eau", "Vol"]
 
-W/Y = Electrik/Eau = 2.0 (super efficace)
-W/Z = Electrik/Vol = 2.0 (super efficace)
-X/Y = Electrik/Eau = 2.0
-X/Z = Electrik/Vol = 2.0
+F(A) — Pikachu attaque Gyarados :
+  w = "Électrik" :
+    get_multiplier("Électrik","Eau") = 2.0  (super efficace)
+    get_multiplier("Électrik","Vol") = 2.0  (super efficace)
+    val = 2.0 × 2.0 = 4.0
+  fa = 4.0
 
-F(A) = 1 * 2.0 * 2.0 + 1 * 2.0 * 2.0 = 4 + 4 = 8.0
+F(B) — Gyarados attaque Pikachu :
+  y = "Eau"  : get_multiplier("Eau","Électrik") = 1.0  (neutre) → fb += 1.0
+  y = "Vol"  : get_multiplier("Vol","Électrik") = 1.0  (neutre) → fb += 1.0
+  fb = 2.0
 
-F(B) = Eau/Electrik * Eau/Electrik + Vol/Electrik * Vol/Electrik
-     = 1.0 * 1.0 + 0.5 * 0.5
-     = 1.0 + 0.25 = 1.25
-
-F(A) > F(B) → Rouge gagne ! ⚡
+F(A) = 4.0 > F(B) = 2.0 → Rouge (Pikachu) gagne ! ⚡
 ```
 
 ---
@@ -316,32 +311,48 @@ F(A) > F(B) → Rouge gagne ! ⚡
 **Publication d'événements** :
 
 ```python
-from aiokafka import AIOKafkaProducer
 import json
+import logging
+from aiokafka import AIOKafkaProducer
+from app.core.config import settings
 
-producer = None
+logger = logging.getLogger(__name__)
 
-async def get_producer():
-    global producer
-    if producer is None:
-        producer = AIOKafkaProducer(
-            bootstrap_servers='kafka:9092',
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+_producer: AIOKafkaProducer | None = None
+
+
+async def get_producer() -> AIOKafkaProducer:
+    global _producer
+    if _producer is None:
+        p = AIOKafkaProducer(
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
-        await producer.start()
-    return producer
+        await p.start()
+        _producer = p
+    return _producer
 
-async def publish_battle_event(event_type: str, data: dict):
-    """Publier un événement de bataille sur Kafka"""
-    prod = await get_producer()
-    event = {
-        "type": event_type,
-        **data
-    }
-    await prod.send('battle.events', value=event)
+
+async def publish_battle_event(event_type: str, data: dict) -> None:
+    global _producer
+    try:
+        producer = await get_producer()
+        payload = {"type": event_type, **data}
+        await producer.send_and_wait(settings.KAFKA_TOPIC_BATTLE, payload)
+    except Exception as exc:
+        # Kafka optionnel en dev — on reset le singleton et on log sans crasher
+        _producer = None
+        logger.warning("Kafka unavailable, event dropped: %s", exc)
+
+
+async def stop_producer() -> None:
+    global _producer
+    if _producer:
+        await _producer.stop()
+        _producer = None
 ```
 
-**Topic Kafka** : `battle.events`
+**Topic Kafka** : `battle-events` (valeur de `settings.KAFKA_TOPIC_BATTLE`)
 
 **Types d'événements** :
 - `turn_played` : À chaque tour joué
@@ -451,7 +462,7 @@ class BattleTurn(Base):
     types_blue = Column(JSON, nullable=False)
     score_red = Column(String, nullable=False)
     score_blue = Column(String, nullable=False)
-    result = Column(String, nullable=False)  # "A", "B", "T"
+    result = Column(String, nullable=False)  # "A", "B", "draw"
 ```
 
 ---
@@ -486,7 +497,7 @@ chat_service/
 1. **WebSocket** : Connexion bidirectionnelle avec le frontend
 2. **Chat en temps réel** : Messages entre joueurs
 3. **Battle Log** : Afficher les événements de bataille
-4. **Kafka Consumer** : Écouter `battle.events` et `chat.messages`
+4. **Kafka Consumer** : Écouter `battle-events` et `chat-messages`
 5. **Broadcast** : Envoyer les messages à tous les clients connectés
 
 ---
@@ -635,9 +646,9 @@ async def kafka_consumer_loop():
     
     while True:
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,      # "battle.events"
-            settings.KAFKA_TOPIC_CHAT,        # "chat.messages"
-            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,  # "kafka:9092"
+            settings.KAFKA_TOPIC_BATTLE,      # "battle-events"
+            settings.KAFKA_TOPIC_CHAT,        # "chat-messages"
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,  # "kafka:29092"
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
             auto_offset_reset="latest",
         )
@@ -723,30 +734,55 @@ async def lifespan(app: FastAPI):
 ### Kafka Producer (services/chat_service.py)
 
 ```python
-from aiokafka import AIOKafkaProducer
 import json
+from aiokafka import AIOKafkaProducer
+from app.core.config import settings
 
-producer = None
+_producer: AIOKafkaProducer | None = None
 
-async def get_producer():
-    global producer
-    if producer is None:
-        producer = AIOKafkaProducer(
-            bootstrap_servers='kafka:9092',
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+
+async def get_producer() -> AIOKafkaProducer:
+    global _producer
+    if _producer is None:
+        p = AIOKafkaProducer(
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
-        await producer.start()
-    return producer
+        await p.start()
+        _producer = p
+    return _producer
+
 
 async def publish_message(message: dict):
-    """Publier un message sur Kafka pour distribution"""
-    prod = await get_producer()
-    await prod.send('chat.messages', value=message)
+    """Publier un message sur Kafka + sauvegarder en BDD."""
+    # Sauvegarde en BDD (historique)
+    try:
+        async with AsyncSessionLocal() as db:
+            db_msg = Message(
+                room=message.get("room"),
+                author=message.get("author"),
+                content=message.get("content"),
+                is_bot=message.get("is_bot", False),
+                team=message.get("team")
+            )
+            db.add(db_msg)
+            await db.commit()
+    except Exception as e:
+        logger.error(f"Error saving message to DB: {e}")
+
+    # Publication sur Kafka
+    try:
+        producer = await get_producer()
+        await producer.send_and_wait(settings.KAFKA_TOPIC_CHAT, message)
+    except Exception as e:
+        logger.warning(f"Kafka producer error: {e}")
+
 
 async def stop_producer():
-    global producer
-    if producer:
-        await producer.stop()
+    global _producer
+    if _producer:
+        await _producer.stop()
+        _producer = None
 ```
 
 ---
@@ -757,7 +793,7 @@ async def stop_producer():
 
 **Q1 : Expliquez comment fonctionne F(A).**
 
-> "F(A) est la formule qui calcule l'avantage de types dans un combat Pokémon. Elle utilise une table TYPE_CHART de 18x18 types avec des multiplicateurs (2.0 = super efficace, 0.5 = peu efficace, 0 = aucun effet). La formule est : F(A) = 1 × (W/Y) × (W/Z) + 1 × (X/Y) × (X/Z), où W et X sont les types de l'attaquant, Y et Z ceux du défenseur. On calcule F(A) et F(B) pour les deux joueurs, et celui qui a le plus grand score remporte le tour."
+> "F(A) est la formule qui calcule l'avantage de types dans un combat Pokémon. Elle utilise une table TYPE_CHART de 18×18 types avec des multiplicateurs (2.0 = super efficace, 0.5 = peu efficace, 0 = aucun effet). Pour chaque type w de A, on multiplie tous les get_multiplier(w, y) pour chaque type y de B, et on additionne les produits — c'est F(A). On fait pareil en sens inverse pour F(B). Celui qui a le plus grand score remporte le tour. En cas d'égalité, resolve_turn() retourne 'draw'."
 
 ---
 

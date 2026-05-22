@@ -243,36 +243,28 @@ async def kafka_consumer_loop():
 
 **Pourquoi c'est piégeux :**
 - Teste ta compréhension de la formule
-- Teste si tu sais modifier du code sans tout casser
+- Teste si tu sais expliquer que le code ACTUEL gère déjà ça
 
-**Comment te préparer :**
+**Bonne réponse :**
+> "Notre implémentation utilise une double boucle `for w in types_a` / `for y in types_b`. Elle itère sur TOUS les types de la liste, quelle que soit sa taille. Un Pokémon mono-type donnera 1 itération, bi-type en donnera 2, triple-type en donnera 3. **Aucune modification n'est nécessaire** — le code supporte déjà le cas."
+
+**Exemple mental pour Pokémon triple-type** (si jamais) :
 ```python
-# EXERCICE : Modifie pour gérer 3 types
+# types_a = ["Feu", "Vol", "Acier"]  →  3 itérations automatiques
+# La boucle for w in types_a parcourt les 3 types naturellement
 
-def calc_advantage(types_a, types_b):
-    # Au lieu de :
-    ta = types_a if len(types_a) == 2 else [types_a[0], types_a[0]]
-    
-    # MODIFIE EN :
-    if len(types_a) == 1:
-        ta = [types_a[0], types_a[0]]
-    elif len(types_a) == 2:
-        ta = types_a
-    else:  # 3 types
-        ta = types_a  # Garde les 3
-    
-    # Adapte la boucle pour itérer sur tous les types
-    fa = 0.0
-    for w in ta:  # Itère sur TOUS les types (2 ou 3)
-        val = 1.0
-        for y in tb:
-            val *= get_multiplier(w, y)
-        fa += val
+# Code actuel — PAS BESOIN de le modifier :
+fa = 0.0
+for w in types_a:       # fonctionne pour 1, 2 ou 3 types
+    val = 1.0
+    for y in types_b:
+        val *= get_multiplier(w, y)
+    fa += val
 ```
 
 **Entraînement (J7) :**
-- Faire cette modification en 15 min
-- Tester mentalement avec Pikachu (Électrik-Vol-Acier)
+- Tester mentalement avec Pikachu (Électrik-Vol-Acier) contre Bulbizarre [Plante, Poison]
+- Expliquer pourquoi aucune modification n'est nécessaire en 2 min
 
 ---
 

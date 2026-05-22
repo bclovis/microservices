@@ -64,7 +64,7 @@
   - `main.py` → kafka_consumer_loop() avec retry exponential backoff
   - `routes/chat.py` → WebSocket /ws/chat/{team}
   - `services/chat_service.py` → broadcast_all() vs broadcast(room)
-- **15h30-16h** : Note comment ton consumer lit battle.events et envoie sur WebSocket
+- **15h30-16h** : Note comment ton consumer lit battle-events et envoie sur WebSocket
 
 **✅ Validation J2** : Tu comprends le flow Kafka → WebSocket dans TON projet.
 
@@ -130,7 +130,7 @@
 - **9h-10h** : Lire main.py ligne par ligne
   - kafka_consumer_loop() : while True avec try/except
   - Retry exponential backoff : 2s → 4s → 8s → 30s max
-  - Consumer topics : battle.events
+  - Consumer topics : battle-events
 - **10h-11h** : Lire routes/chat.py et chat_service.py
   - WebSocket connect/disconnect pattern
   - active_connections : Dict[str, List[WebSocket]]
@@ -218,15 +218,14 @@ Prof : "Ajoute un print() dans calc_advantage()
 **Exemple réel :**
 ```
 Prof : "Explique-moi cette ligne :
-       X = attacker_types[1] if len(attacker_types) > 1 else W"
+       val *= get_multiplier(w, y)"
 ```
 
 **Ce qu'il teste :** Tu comprends VRAIMENT ton code
 
-**Préparation :**
-- Pour CHAQUE ligne de calc_advantage() et du consumer loop
-- Écris une explication en français
-- Apprends par cœur les parties critiques
+**Réponse :** "On multiplie le multiplicateur de type de w (type de A) contre y (type de B).
+Si Feu contre Plante, get_multiplier retourne 2.0. Si Feu contre Eau, 0.5.
+On accumule toutes ces multiplications dans `val` pour un type de A donné, puis on ajoute `val` à fa."
 
 ---
 
@@ -293,7 +292,7 @@ def resolve_turn(types_red, types_blue):
     elif fb > fa:
         return "B"
     else:
-        return "T"
+        return "draw"
 
 # Réécoute-toi : combien de "euh..." ?
 # Objectif : 0 hésitation
