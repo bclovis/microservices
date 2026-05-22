@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-red
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-red
+  template:
+    metadata:
+      labels:
+        app: frontend-red
+        team: red
+    spec:
+      containers:
+      - name: frontend-red
+        image: pokemon-drafter/frontend-red:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-red
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: frontend-red
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-blue
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-blue
+  template:
+    metadata:
+      labels:
+        app: frontend-blue
+        team: blue
+    spec:
+      containers:
+      - name: frontend-blue
+        image: pokemon-drafter/frontend-blue:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-blue
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: frontend-blue
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

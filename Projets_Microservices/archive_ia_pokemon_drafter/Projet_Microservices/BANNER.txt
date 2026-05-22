@@ -1,0 +1,238 @@
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║   ██████╗  ██████╗ ██╗  ██╗███████╗███╗   ███╗ ██████╗ ███╗   ██╗  ║
+║   ██╔══██╗██╔═══██╗██║ ██╔╝██╔════╝████╗ ████║██╔═══██╗████╗  ██║  ║
+║   ██████╔╝██║   ██║█████╔╝ █████╗  ██╔████╔██║██║   ██║██╔██╗ ██║  ║
+║   ██╔═══╝ ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║  ║
+║   ██║     ╚██████╔╝██║  ██╗███████╗██║ ╚═╝ ██║╚██████╔╝██║ ╚████║  ║
+║   ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝  ║
+║                                                                      ║
+║              ██████╗ ██████╗  █████╗ ███████╗████████╗███████╗██████╗║
+║              ██╔══██╗██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔════╝██╔══██╗
+║              ██║  ██║██████╔╝███████║█████╗     ██║   █████╗  ██████╔╝
+║              ██║  ██║██╔══██╗██╔══██║██╔══╝     ██║   ██╔══╝  ██╔══██╗
+║              ██████╔╝██║  ██║██║  ██║██║        ██║   ███████╗██║  ██║
+║              ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝   ╚══════╝╚═╝  ╚═╝
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+                    🎮 Architecture Microservices 🎮
+                          École ICC - 2026
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                         🔴 ÉQUIPE ROUGE 🔴
+                            VS
+                         🔵 ÉQUIPE BLEUE 🔵
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                      ARCHITECTURE OVERVIEW                         │
+└────────────────────────────────────────────────────────────────────┘
+
+                          ┌─────────────┐
+                          │   USERS     │
+                          └──────┬──────┘
+                                 │
+                          ┌──────▼──────┐
+                          │ API Gateway │
+                          │   (Nginx)   │
+                          └──────┬──────┘
+                                 │
+                 ┌───────────────┼───────────────┐
+                 │               │               │
+            ┌────▼────┐    ┌────▼────┐    ┌────▼────┐
+            │Frontend │    │Frontend │    │ Keycloak│
+            │   Red   │    │  Blue   │    │  (IdP)  │
+            └────┬────┘    └────┬────┘    └─────────┘
+                 │               │
+            ┌────▼────┐    ┌────▼────┐
+            │ Backend │    │ Backend │
+            │   Red   │    │  Blue   │
+            └────┬────┘    └────┬────┘
+                 │               │
+                 └───────┬───────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+    ┌───▼────┐    ┌──────▼──────┐    ┌───▼────┐
+    │ Postgre│    │    Redis    │    │ Kafka  │
+    │   SQL  │    │   (Cache)   │    │        │
+    └────────┘    └─────────────┘    └────┬───┘
+                                           │
+                               ┌───────────┼───────────┐
+                               │                       │
+                        ┌──────▼──────┐        ┌──────▼──────┐
+                        │Recommend    │        │ Encryption  │
+                        │  Engine     │        │   Service   │
+                        └─────────────┘        └─────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                         SERVICES (10)                              │
+└────────────────────────────────────────────────────────────────────┘
+
+  🌐 API Gateway          : Nginx Reverse Proxy
+  🔴 Frontend Red         : Angular 17 (Équipe Rouge)
+  🔵 Frontend Blue        : Angular 17 (Équipe Bleue)
+  🔴 Backend Red          : FastAPI Python (Équipe Rouge)
+  🔵 Backend Blue         : FastAPI Python (Équipe Bleue)
+  💾 Database             : PostgreSQL 15
+  ⚡ Cache Service        : Redis 7
+  📨 Message Broker       : Kafka 3.6
+  🧠 Recommendation       : Python Algorithm
+  🔒 Encryption           : Cryptography Service
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                      FORMULE DE COMBAT                             │
+└────────────────────────────────────────────────────────────────────┘
+
+  Pokemon A (type W/X) VS Pokemon B (type Y/Z)
+
+  F(A) = 1×(W/Y)×(W/Z) + 1×(X/Y)×(X/Z)
+  F(B) = 1×(Y/W)×(Y/X) + 1×(Z/W)×(Z/X)
+
+  🏆 Le Pokemon avec le F le plus élevé gagne le tour
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                    QUICK START COMMANDS                            │
+└────────────────────────────────────────────────────────────────────┘
+
+  Development:
+    $ make dev-up              # Start dev environment
+    $ make dev-down            # Stop dev environment
+
+  Production:
+    $ make build               # Build Docker images
+    $ make deploy              # Deploy to Kubernetes
+    $ make status              # Check deployment status
+    $ make logs                # View logs
+    $ make clean               # Cleanup deployment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                         ACCESS URLS                                │
+└────────────────────────────────────────────────────────────────────┘
+
+  Development (Docker Compose):
+    🔴 Frontend Red     : http://localhost:4201
+    🔵 Frontend Blue    : http://localhost:4202
+    📋 API Docs Red     : http://localhost:8001/docs
+    📋 API Docs Blue    : http://localhost:8002/docs
+    🌐 API Gateway      : http://localhost:8080
+
+  Production (Kubernetes):
+    🏠 Main             : http://pokemon-drafter.local
+    🔴 Red Team         : http://red.pokemon-drafter.local
+    🔵 Blue Team        : http://blue.pokemon-drafter.local
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                       TEST ACCOUNTS                                │
+└────────────────────────────────────────────────────────────────────┘
+
+  🔴 RED TEAM
+     Username : red_player1          Username : red_player2
+     Email    : red1@pokemon.com     Email    : red2@pokemon.com
+     Password : RedPass123!          Password : RedPass123!
+
+  🔵 BLUE TEAM
+     Username : blue_player1         Username : blue_player2
+     Email    : blue1@pokemon.com    Email    : blue2@pokemon.com
+     Password : BluePass123!         Password : BluePass123!
+
+  👤 ADMIN
+     Username : admin
+     Email    : admin@pokemon.com
+     Password : AdminPass123!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                      PROJECT STATS                                 │
+└────────────────────────────────────────────────────────────────────┘
+
+  📊 Services         : 10 microservices
+  📄 Files            : ~45 files created
+  💻 Code Lines       : ~3000+ lines
+  📖 Documentation    : ~70 KB
+  🐳 Docker Images    : 10 images
+  ☸️  K8s Manifests   : 7 YAML files
+  ✅ Tests            : Frontend tests ready
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                    TECHNOLOGY STACK                                │
+└────────────────────────────────────────────────────────────────────┘
+
+  Backend      : Python 3.11 + FastAPI 0.104
+  Frontend     : Angular 17 + TypeScript 5.2
+  Database     : PostgreSQL 15
+  Cache        : Redis 7
+  Broker       : Kafka 3.6
+  Gateway      : Nginx
+  Container    : Docker
+  Orchestr.    : Kubernetes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                       FEATURES STATUS                              │
+└────────────────────────────────────────────────────────────────────┘
+
+  ✅ Microservices Architecture
+  ✅ Docker Containerization
+  ✅ Kubernetes Deployment
+  ✅ API Gateway (Nginx)
+  ✅ Red/Blue Team Separation
+  ✅ PostgreSQL Database Schema
+  ✅ Redis Caching
+  ✅ Kafka Message Broker
+  ✅ Type Advantage Calculation
+  ✅ Recommendation Engine
+  ✅ Encryption Service
+  ✅ Frontend Components
+  ✅ Backend API Structure
+  ✅ Complete Documentation
+  ⚠️  Authentication (JWT structure ready)
+  ⚠️  Duel Logic (to complete)
+  ⚠️  Real-time Chat (Kafka ready)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────────────────────────────────────────────┐
+│                         SUPPORT                                    │
+└────────────────────────────────────────────────────────────────────┘
+
+  📧 Email      : support@pokemon-drafter.local
+  🐙 GitHub     : https://github.com/bclovis/Projet_Microservices
+  🐛 Issues     : github.com/bclovis/Projet_Microservices/issues
+  📚 Docs       : See docs/ folder
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                   🎮 READY TO BATTLE! 🎮
+
+              Choisissez votre équipe et que le meilleur gagne!
+
+                      Version 1.0.0 "Foundation"
+                         26 janvier 2026
+                         
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+           Projet Académique - École ICC - 2026
+              À des fins éducatives uniquement
+           Pokemon © Nintendo/Game Freak/Creatures Inc.
+                  Données via PokeAPI.co
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,0 +1,59 @@
+<div class="h-full w-64 bg-white border-r border-gray-100 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    <!-- Logo Section -->
+    <div class="p-8 flex items-center justify-center">
+        <img src="assets/logo.png" alt="PokeDrafter" class="h-16 w-auto object-contain">
+    </div>
+
+    <!-- Navigation Links -->
+    <nav class="flex-1 px-4 space-y-2 py-6">
+        <app-nav-link *ngFor="let item of navigationItems" [route]="item.route" [label]="item.label"
+            [svgPath]="item.svgPath" [fillRule]="item.fillRule" [clipRule]="item.clipRule"></app-nav-link>
+    </nav>
+
+    <!-- User Profile Section -->
+    <div class="px-4 py-8 border-t border-gray-50 relative group/profile" #profileMenuContainer>
+
+        <!-- Profile Popup Menu (Extension to the right) -->
+        <div *ngIf="isProfileMenuOpen"
+            class="absolute left-[calc(100%-1rem)] bottom-8 ml-4 w-64 bg-white rounded-2xl shadow-[4px_0_24px_rgba(0,0,0,0.08)] border border-gray-100 overflow-hidden p-2 z-50 animate-in fade-in slide-in-from-left-4 duration-200">
+
+            <!-- Editable Items -->
+            <div class="space-y-1">
+                <app-profile-menu-item *ngFor="let item of editableMenuItems" [label]="item.label"
+                    [subtitle]="item.subtitle" [svgPath]="item.svgPath" [fillRule]="item.fillRule"
+                    [clipRule]="item.clipRule"></app-profile-menu-item>
+            </div>
+
+            <div class="h-px bg-gray-50 my-2 mx-2"></div>
+
+            <!-- Actions -->
+            <div class="space-y-1">
+                <app-profile-menu-item *ngFor="let item of actionMenuItems" [label]="item.label"
+                    [svgPath]="item.svgPath" [fillRule]="item.fillRule" [clipRule]="item.clipRule"
+                    [variant]="item.variant" (itemClick)="item.action?.()"></app-profile-menu-item>
+            </div>
+        </div>
+
+        <!-- Profile Toggle Button -->
+        <button (click)="toggleProfileMenu()"
+            class="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-gray-500 hover:bg-gray-50 hover:text-poke-blue transition-all duration-200 group cursor-pointer focus:outline-none relative"
+            [class.bg-gray-50]="isProfileMenuOpen" [class.text-poke-blue]="isProfileMenuOpen">
+            <!-- User Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14"
+                class="w-5 h-5 fill-current transition-colors">
+                <path id="Subtract" fill-rule="evenodd"
+                    d="M7 14c4.48 0 7 -2.52 7 -7s-2.52 -7 -7 -7 -7 2.52 -7 7 2.52 7 7 7Zm3.6366 -2.4712c-0.2546 -0.4744 -0.6015 -0.8978 -1.02442 -1.2434 -0.73718 -0.60258 -1.66 -0.93173 -2.6121 -0.93173s-1.87492 0.32915 -2.6121 0.93173c-0.42289 0.3456 -0.76977 0.769 -1.02445 1.2434 0.83239 0.5983 2.01615 0.9712 3.63658 0.9712 1.6204 0 2.80414 -0.3729 3.63649 -0.9712ZM9.35509 5.26879c0 1.5077 -0.84807 2.35577 -2.35577 2.35577 -1.50769 0 -2.35577 -0.84807 -2.35577 -2.35577 0 -1.50769 0.84808 -2.35577 2.35577 -2.35577 1.5077 0 2.35577 0.84808 2.35577 2.35577Z"
+                    clip-rule="evenodd" stroke-width="1"></path>
+            </svg>
+            <span class="text-xl font-medium">Profil</span>
+
+            <!-- Right Arrow Indicator -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
+                stroke="currentColor"
+                class="w-4 h-4 ml-auto transition-transform duration-200 text-gray-400 group-hover:text-poke-blue"
+                [class.translate-x-1]="isProfileMenuOpen">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+        </button>
+    </div>
+</div>

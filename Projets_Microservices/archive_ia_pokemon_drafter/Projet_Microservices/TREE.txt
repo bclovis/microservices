@@ -1,0 +1,217 @@
+Projet_Microservices/
+│
+├── 📄 README.md                    # Documentation principale
+├── 📄 QUICKSTART.md                # Guide de démarrage rapide
+├── 📄 STATUS.md                    # État d'avancement du projet
+├── 📄 CONTRIBUTING.md              # Guide de contribution
+├── 📄 .gitignore                   # Fichiers ignorés par Git
+├── 📄 .dockerignore                # Fichiers ignorés par Docker
+├── 📄 docker-compose.yml           # Configuration développement
+├── 📄 Makefile                     # Commandes utiles
+├── 📄 PROJECT_STRUCTURE.txt        # Structure générée
+│
+├── 🔧 build-images.sh              # Script build Docker
+├── 🚀 deploy.sh                    # Script déploiement K8s
+├── 🧹 cleanup.sh                   # Script nettoyage
+│
+├── 📁 api-gateway/                 # Nginx Reverse Proxy
+│   ├── Dockerfile
+│   └── nginx.conf
+│
+├── 📁 backend-red/                 # Backend Équipe Rouge
+│   ├── main.py                     # Application FastAPI
+│   ├── requirements.txt            # Dépendances Python
+│   └── Dockerfile
+│
+├── 📁 backend-blue/                # Backend Équipe Bleue
+│   ├── main.py                     # Application FastAPI
+│   ├── requirements.txt            # Dépendances Python
+│   └── Dockerfile
+│
+├── 📁 frontend-red/                # Frontend Équipe Rouge
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── app.component.ts
+│   │   │   ├── team-manager.component.ts
+│   │   │   └── team-manager.component.spec.ts
+│   │   ├── index.html
+│   │   ├── main.ts
+│   │   └── styles.css
+│   ├── package.json
+│   ├── angular.json
+│   ├── Dockerfile
+│   └── nginx.conf
+│
+├── 📁 frontend-blue/               # Frontend Équipe Bleue
+│   ├── src/
+│   │   ├── app/
+│   │   │   └── app.component.ts
+│   │   ├── index.html
+│   │   ├── main.ts
+│   │   └── styles.css
+│   ├── package.json
+│   ├── angular.json
+│   ├── Dockerfile
+│   └── nginx.conf
+│
+├── 📁 database/                    # Base de données PostgreSQL
+│   └── schema.sql                  # Schéma complet DB
+│
+├── 📁 recommendation/              # Engine de recommandation
+│   ├── main.py                     # Service FastAPI
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── 📁 encryption/                  # Service de chiffrement
+│   ├── main.py                     # Service FastAPI
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── 📁 k8s/                         # Configurations Kubernetes
+│   ├── database.yaml               # PostgreSQL + PV + PVC
+│   ├── cache-service.yaml          # Redis
+│   ├── kafka.yaml                  # Kafka broker
+│   ├── backends.yaml               # Backends Red/Blue
+│   ├── frontends.yaml              # Frontends Red/Blue
+│   ├── services.yaml               # Recommendation + Encryption
+│   └── api-gateway.yaml            # Nginx gateway
+│
+└── 📁 docs/                        # Documentation
+    ├── ARCHITECTURE.md             # Architecture détaillée
+    ├── GUIDE_DEVELOPPEMENT.md      # Guide développeur
+    ├── RAPPORT_ANALYSE.md          # Analyse des choix
+    ├── CGU.md                      # Conditions d'utilisation
+    └── CONTACTS.md                 # Contacts et support
+
+STATISTIQUES DU PROJET
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Fichiers Créés
+├── Python (.py):        6 fichiers
+├── TypeScript (.ts):    4 fichiers
+├── Kubernetes (.yaml):  7 fichiers
+├── Docker:             10 fichiers
+├── Configuration:       5 fichiers
+├── Documentation:      10 fichiers
+└── Scripts:             3 fichiers
+    ───────────────────────
+    TOTAL:             ~45 fichiers
+
+🏗️ Services Déployés
+├── Frontend Red        ✅
+├── Frontend Blue       ✅
+├── Backend Red         ✅
+├── Backend Blue        ✅
+├── PostgreSQL          ✅
+├── Redis               ✅
+├── Kafka               ✅
+├── Recommendation      ✅
+├── Encryption          ✅
+└── API Gateway         ✅
+    ───────────────────────
+    TOTAL:             10 services
+
+📦 Technologies
+├── Backend:     Python 3.11 + FastAPI
+├── Frontend:    Angular 17 + TypeScript
+├── Database:    PostgreSQL 15
+├── Cache:       Redis 7
+├── Broker:      Kafka 3.6
+├── Gateway:     Nginx
+├── Container:   Docker
+└── Orchestr.:   Kubernetes
+
+🎯 Fonctionnalités
+├── Authentification JWT      ⚠️  (structure prête)
+├── CRUD Équipes             ✅
+├── Recherche Pokemon        ✅
+├── Recommandation           ✅
+├── Calcul Avantages         ✅
+├── Duels                    ⚠️  (à compléter)
+├── Chat temps réel          ⚠️  (Kafka prêt)
+├── Historique parties       ✅
+├── Cache PokeAPI           ✅
+├── Chiffrement inter-back  ✅
+└── Tests frontend          ✅
+
+📖 Documentation
+├── README principal        ✅  3.8 KB
+├── Quick Start Guide       ✅  7.4 KB
+├── Architecture            ✅  ~8 KB
+├── Guide Développement     ✅  ~9 KB
+├── Rapport Analyse         ✅  ~11 KB
+├── Status projet           ✅  9 KB
+├── CGU                     ✅  ~8 KB
+├── Contacts                ✅  ~6 KB
+└── Contributing            ✅  ~8 KB
+    ────────────────────────────
+    TOTAL:                ~70 KB
+
+🔒 Sécurité
+├── Secrets Kubernetes      ✅
+├── Service chiffrement     ✅
+├── Hashage passwords       ✅
+├── JWT structure           ⚠️
+└── HTTPS/TLS              ❌  (local only)
+
+🧪 Tests
+├── Tests Frontend         ✅  (structure)
+├── Tests Backend          ⚠️  (à compléter)
+├── Tests Intégration      ❌
+└── Tests E2E             ❌
+
+🚀 Déploiement
+├── Docker Compose         ✅
+├── Kubernetes Manifests   ✅
+├── Scripts automatisés    ✅
+├── Makefile               ✅
+└── CI/CD                  ❌  (à ajouter)
+
+LÉGENDE
+━━━━━━━
+✅ Complet et fonctionnel
+⚠️  Partiel ou à finaliser
+❌ Non implémenté
+
+COMMANDES RAPIDES
+━━━━━━━━━━━━━━━━
+
+Développement:
+  make dev-up        # Démarrer environnement
+  make dev-down      # Arrêter environnement
+
+Production:
+  make build         # Build images Docker
+  make deploy        # Déployer Kubernetes
+  make clean         # Nettoyer déploiement
+
+Utilities:
+  make test          # Lancer tests
+  make status        # Voir statut
+  make logs          # Voir logs
+
+URLS IMPORTANTES
+━━━━━━━━━━━━━━━
+
+Développement (Docker Compose):
+  Frontend Red:   http://localhost:4201
+  Frontend Blue:  http://localhost:4202
+  Backend Red:    http://localhost:8001/docs
+  Backend Blue:   http://localhost:8002/docs
+
+Production (Kubernetes):
+  Main:           http://pokemon-drafter.local
+  Red Team:       http://red.pokemon-drafter.local
+  Blue Team:      http://blue.pokemon-drafter.local
+
+COMPTES DE TEST
+━━━━━━━━━━━━━━
+
+Red:    red_player1  / RedPass123!
+Blue:   blue_player1 / BluePass123!
+Admin:  admin        / AdminPass123!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Projet Pokemon Drafter - Architecture Microservices
+École ICC - 2026
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

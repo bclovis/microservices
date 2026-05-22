@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: pokemon-drafter
+data:
+  POKEAPI_BASE_URL: "https://pokeapi.co/api/v2"
+  KAFKA_BROKER: "kafka:9092"
+  REDIS_URL: "redis://cache-service:6379"
+  DATABASE_URL: "postgresql://pokemon_user:pokemon_pass123@database:5432/pokemon_db"
+  ENCRYPTION_SERVICE_URL: "http://encryption:8000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-red
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-red
+  template:
+    metadata:
+      labels:
+        app: backend-red
+        team: red
+    spec:
+      containers:
+      - name: backend-red
+        image: pokemon-drafter/backend-red:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: backend-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-red
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: backend-red
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-blue
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-blue
+  template:
+    metadata:
+      labels:
+        app: backend-blue
+        team: blue
+    spec:
+      containers:
+      - name: backend-blue
+        image: pokemon-drafter/backend-blue:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: backend-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-blue
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: backend-blue
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP

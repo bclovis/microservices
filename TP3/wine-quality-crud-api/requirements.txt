@@ -1,0 +1,12 @@
+FastAPI
+uvicorn
+pydantic
+python-jose
+passlib[bcrypt]
+sqlalchemy
+pandas
+scikit-learn
+joblib
+pytest
+pytest-asyncio
+httpx

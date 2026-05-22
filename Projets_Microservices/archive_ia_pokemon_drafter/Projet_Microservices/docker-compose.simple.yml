@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Database
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pokemon_db
+      POSTGRES_USER: pokemon_user
+      POSTGRES_PASSWORD: pokemon_pass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - pokemon-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pokemon_user -d pokemon_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  cache-service:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - pokemon-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Kafka
+  kafka:
+    image: apache/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'pokemon-drafter-kafka'
+    networks:
+      - pokemon-network
+
+  # Encryption Service
+  encryption:
+    build: ./encryption
+    ports:
+      - "8003:8000"
+    environment:
+      - ENCRYPTION_KEY=pokemon_encryption_key_123456789
+    networks:
+      - pokemon-network
+
+  # Recommendation Engine
+  recommendation:
+    build: ./recommendation
+    ports:
+      - "8004:8000"
+    environment:
+      - POKEAPI_BASE_URL=https://pokeapi.co/api/v2
+      - REDIS_URL=redis://cache-service:6379
+    depends_on:
+      cache-service:
+        condition: service_healthy
+    networks:
+      - pokemon-network
+
+  # Backend Red
+  backend-red:
+    build: ./backend-red
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://pokemon_user:pokemon_pass123@database:5432/pokemon_db
+      - REDIS_URL=redis://cache-service:6379
+      - KAFKA_BROKER=kafka:9092
+      - POKEAPI_BASE_URL=https://pokeapi.co/api/v2
+      - ENCRYPTION_SERVICE_URL=http://encryption:8000
+    depends_on:
+      database:
+        condition: service_healthy
+      cache-service:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      encryption:
+        condition: service_started
+    networks:
+      - pokemon-network
+
+  # Backend Blue
+  backend-blue:
+    build: ./backend-blue
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=postgresql://pokemon_user:pokemon_pass123@database:5432/pokemon_db
+      - REDIS_URL=redis://cache-service:6379
+      - KAFKA_BROKER=kafka:9092
+      - POKEAPI_BASE_URL=https://pokeapi.co/api/v2
+      - ENCRYPTION_SERVICE_URL=http://encryption:8000
+    depends_on:
+      database:
+        condition: service_healthy
+      cache-service:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      encryption:
+        condition: service_started
+    networks:
+      - pokemon-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  pokemon-network:
+    driver: bridge

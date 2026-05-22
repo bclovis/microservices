@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: recommendation
+  template:
+    metadata:
+      labels:
+        app: recommendation
+    spec:
+      containers:
+      - name: recommendation
+        image: pokemon-drafter/recommendation:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: POKEAPI_BASE_URL
+          value: "https://pokeapi.co/api/v2"
+        - name: REDIS_URL
+          value: "redis://cache-service:6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: recommendation
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: encryption
+  namespace: pokemon-drafter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: encryption
+  template:
+    metadata:
+      labels:
+        app: encryption
+    spec:
+      containers:
+      - name: encryption
+        image: pokemon-drafter/encryption:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: encryption-secret
+              key: key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: encryption
+  namespace: pokemon-drafter
+spec:
+  selector:
+    app: encryption
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: encryption-secret
+  namespace: pokemon-drafter
+type: Opaque
+data:
+  key: cG9rZW1vbl9lbmNyeXB0aW9uX2tleV8xMjM0NTY3ODk=  # pokemon_encryption_key_123456789

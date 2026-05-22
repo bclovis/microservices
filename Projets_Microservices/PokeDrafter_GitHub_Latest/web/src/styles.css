@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+    font-family: 'CyGrotesk';
+    src: url('/assets/fonts/CyGrotesk-KeyRegular.otf') format('opentype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'CyGrotesk';
+    src: url('/assets/fonts/CyGrotesk-KeyBold.otf') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+}
+
+/* Custom Base Styles - Light Mode */
+body {
+    @apply bg-white text-gray-900 font-sans w-full overflow-x-hidden;
+    font-family: 'CyGrotesk', system-ui, sans-serif;
+}

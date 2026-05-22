@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: pokedrafter/auth-service:latest
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/auth_db
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 8001
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: team-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: team-service
+  template:
+    metadata:
+      labels:
+        app: team-service
+    spec:
+      containers:
+        - name: team-service
+          image: pokedrafter/team-service:latest
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/team_db
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: team-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: team-service
+  ports:
+    - port: 8002
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: battle-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: battle-service
+  template:
+    metadata:
+      labels:
+        app: battle-service
+    spec:
+      containers:
+        - name: battle-service
+          image: pokedrafter/battle-service:latest
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/battle_db
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: battle-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: battle-service
+  ports:
+    - port: 8003
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pokedex-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pokedex-service
+  template:
+    metadata:
+      labels:
+        app: pokedex-service
+    spec:
+      containers:
+        - name: pokedex-service
+          image: pokedrafter/pokedex-service:latest
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pokedex-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: pokedex-service
+  ports:
+    - port: 8004
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chat-service
+  template:
+    metadata:
+      labels:
+        app: chat-service
+    spec:
+      containers:
+        - name: chat-service
+          image: pokedrafter/chat-service:latest
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: chat-service
+  ports:
+    - port: 8005
+      targetPort: 8000

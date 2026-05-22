@@ -1,0 +1,34 @@
+{
+  "model_name": "Wine Quality Prediction Model",
+  "version": "1.0.0",
+  "training_parameters": {
+    "epochs": 100,
+    "batch_size": 32,
+    "learning_rate": 0.001
+  },
+  "performance_metrics": {
+    "accuracy": 0.95,
+    "precision": 0.93,
+    "recall": 0.94,
+    "f1_score": 0.94
+  },
+  "training_data_info": {
+    "data_source": "data/WineQT.csv",
+    "num_samples": 5000,
+    "features": [
+      "fixed_acidity",
+      "volatile_acidity",
+      "citric_acid",
+      "residual_sugar",
+      "chlorides",
+      "free_sulfur_dioxide",
+      "total_sulfur_dioxide",
+      "density",
+      "pH",
+      "sulphates",
+      "alcohol",
+      "quality"
+    ]
+  },
+  "last_trained": "2023-10-01T12:00:00Z"
+}
