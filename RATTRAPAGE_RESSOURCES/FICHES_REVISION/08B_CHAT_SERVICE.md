@@ -31,38 +31,48 @@ async def kafka_consumer_loop():
     
     while True:             # Tourne INDÉFINIMENT tant que le service est up
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,               # Topic "battle.events"
+            settings.KAFKA_TOPIC_BATTLE,    # ← Topic 1 : events de bataille
+            settings.KAFKA_TOPIC_CHAT,      # ← Topic 2 : messages du chat
             bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-            auto_offset_reset="latest",                # Lit seulement les NOUVEAUX messages
+            auto_offset_reset="latest",     # Lit seulement les NOUVEAUX messages
         )
         try:
             await consumer.start()
-            logger.warning("[Kafka] Consumer connecté sur %s", settings.KAFKA_TOPIC_BATTLE)
             retry_delay = 2     # ← RESET après connexion réussie
             
-            async for msg in consumer:          # Pour chaque message Kafka reçu
-                event = msg.value               # Désérialisé automatiquement (JSON → dict)
-                etype = event.get("type", "")
+            async for msg in consumer:      # Pour chaque message Kafka reçu
+                event = msg.value           # Désérialisé automatiquement (JSON → dict)
+                topic = msg.topic           # ← De quel topic vient ce message ?
                 
-                if etype == "turn_played":
-                    result = event.get("result", "?")
-                    turn = event.get("turn_number", "?")
-                    winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
-                    
-                    notif = {
-                        "author": "bot",
-                        "content": f"Tour {turn} — {winner} remporte le tour !",
-                        "is_bot": True
-                    }
-                    await chat_service.broadcast_all(notif)   # → Envoie à tous les WebSocket
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    # Événement de bataille → notif dans le chat
+                    etype = event.get("type", "")
+                    if etype == "turn_played":
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        notif = {
+                            "author": "bot",
+                            "content": f"Tour {turn} — {winner} remporte le tour !",
+                            "is_bot": True
+                        }
+                        await chat_service.broadcast_all(notif)
+
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    # Message de chat → broadcast dans la room ou global
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)   # Room ciblée
+                    else:
+                        await chat_service.broadcast_all(event)     # Broadcast global
         
         except asyncio.CancelledError:
             await consumer.stop()
             return                      # Arrêt propre si le serveur shutdown
         
         except Exception as e:
-            logger.warning("Kafka indisponible, retry dans %ds : %s", retry_delay, e)
+            logger.warning("Kafka unavailable, retrying in %ds : %s", retry_delay, e)
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 30)    # ← Backoff exponentiel
         
@@ -72,6 +82,14 @@ async def kafka_consumer_loop():
             except Exception:
                 pass
 ```
+
+### Pourquoi 2 topics ?
+
+Le consumer écoute **deux topics en même temps** :
+- `KAFKA_TOPIC_BATTLE` → reçoit les events du battle_service (ex: `turn_played`)
+- `KAFKA_TOPIC_CHAT` → reçoit les messages de chat envoyés via Kafka
+
+**`msg.topic`** permet de router le traitement selon la source du message.
 
 ---
 
@@ -149,9 +167,11 @@ await chat_service.broadcast_all(notif)   # Envoie à TOUS les WebSocket connect
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(kafka_consumer_loop())   # Lance en arrière-plan
+    await init_db()                                      # Initialise la BDD chat
+    task = asyncio.create_task(kafka_consumer_loop())    # Lance en arrière-plan
     yield                                                # L'app FastAPI tourne
     task.cancel()                                        # Stop propre à la fermeture
+    await chat_service.stop_producer()                   # Ferme le producer Kafka
 ```
 
 **Ce que ça fait :**

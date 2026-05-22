@@ -42,7 +42,7 @@ postgres:
   environment:
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: postgres
-    POSTGRES_MULTIPLE_DATABASES: auth_db,team_db,battle_db
+    POSTGRES_MULTIPLE_DATABASES: auth_db,team_db,battle_db,chat_db
   volumes:
     - postgres_data:/var/lib/postgresql/data        # Persistance
     - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql  # Création des BDD
@@ -125,7 +125,7 @@ battle_service:
 | team_service | `@postgres:5432/team_db` | team_db |
 | battle_service | `@postgres:5432/battle_db` | battle_db |
 | pokedex_service | `redis://redis:6379` | Redis (pas PostgreSQL) |
-| chat_service | *(pas de BDD)* | Mémoire uniquement |
+| chat_service | `@postgres:5432/chat_db` | chat_db |
 
 ---
 
@@ -136,6 +136,10 @@ volumes:
   postgres_data:   # Les données PostgreSQL survivent au restart
   redis_data:      # Le cache Redis aussi
 ```
+
+**`restart: always`** — tous les services ont cette directive : si un conteneur plante, Docker le redémarre automatiquement. C'est une sécurité en cas de crash inattendu.
+
+---
 
 **Sans volumes :**
 - `docker compose down` → toutes les données perdues

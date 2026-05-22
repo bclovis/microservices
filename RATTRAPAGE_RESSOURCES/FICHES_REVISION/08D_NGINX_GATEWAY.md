@@ -67,6 +67,16 @@ http {
         location /api/pokedex { proxy_pass http://pokedex_service/api/pokedex; }
         location /api/chat    { proxy_pass http://chat_service/api/chat; }
 
+        # Headers proxy standard
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # CORS — géré centralement par Nginx
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS, PUT, DELETE' always;
+        add_header 'Access-Control-Allow-Headers' '...' always;
+
         # Routing WebSocket — configuration SPÉCIALE
         location /ws/ {
             proxy_http_version 1.1;
