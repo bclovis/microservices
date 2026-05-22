@@ -35,6 +35,9 @@
      (battle_svc) ──►   ● topic: battle-events      ├──────────────────┘
                     │   ● topic: chat-messages      │   (chat_svc lit les 2 topics,
                     └──────────────────────────────┘    route via msg.topic)
+```
+
+---
 
 ### 1b. Connexions inter-services (qui appelle qui)
 
