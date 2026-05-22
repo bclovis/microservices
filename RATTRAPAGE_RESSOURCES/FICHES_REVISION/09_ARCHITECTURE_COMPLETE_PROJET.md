@@ -5,6 +5,8 @@
 
 ## 1. VUE D'ENSEMBLE — Ce qu'on a construit
 
+### 1a. Flux vertical : Client → Nginx → Services → Stockage
+
 ```
      ┌──────────────────────────────────────────────────────────────────────┐
      │                       INTERNET / FRONTEND                             │
@@ -33,6 +35,34 @@
      (battle_svc) ──►   ● topic: battle-events      ├──────────────────┘
                     │   ● topic: chat-messages      │   (chat_svc lit les 2 topics,
                     └──────────────────────────────┘    route via msg.topic)
+
+### 1b. Connexions inter-services (qui appelle qui)
+
+```
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │ APPEL REST (synchrone — team_service a besoin de la réponse tout de suite) │
+  └──────────────────────────────────────────────────────────────────────┘
+
+     team_service ──── httpx GET ────► pokedex_service ──── httpx GET ────► pokeapi.co
+        :8002                              :8004                            (API externe)
+     "donne-moi                        "je cherche dans                  "voici les données
+      des Pokémon"                      Redis d'abord,                    Pokémon brutes"
+                                        sinon j'appelle
+                                        pokeapi.co"
+
+
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │ KAFKA (asynchrone — battle publie, chat consomme, ils se connaissent pas) │
+  └──────────────────────────────────────────────────────────────────────┘
+
+     battle_service ──► KAFKA :29092 ──► chat_service
+        :8003          ┌─────────────┐      :8005
+    "un tour a été      │battle-events│   "je reçois l'event,
+     joué, je publie"   │chat-messages│    je regarde msg.topic,
+                        └─────────────┘    je broadcast en WebSocket"
+
+     chat_service ───► KAFKA :29092   (chat publie aussi sur chat-messages
+        :8005          chat-messages   quand un user envoie un message)
 ```
 
 ---
