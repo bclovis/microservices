@@ -6,30 +6,33 @@
 ## 1. VUE D'ENSEMBLE — Ce qu'on a construit
 
 ```
-                        ┌──────────────────────────────────────────────┐
-                        │              INTERNET / FRONTEND              │
-                        └────────────────────┬─────────────────────────┘
-                                             │ HTTP port 80
-                        ┌────────────────────▼─────────────────────────┐
-                        │           NGINX GATEWAY (port 80)             │
-                        │         api/gateway/nginx.conf                │
-                        │  Routing REST + WebSocket — PAS de JWT ici   │
-                        └──┬──────┬──────┬──────┬──────┬───────────────┘
-                           │      │      │      │      │
-              /api/auth    │      │      │      │      │ /ws/
-              /api/teams   │      │      │      │      │ WebSocket
-              /api/battle  │      │      │      │      │
-              /api/pokedex │      │      │      │      │
-              /api/chat    │      │      │      │      │
-                           ▼      ▼      ▼      ▼      ▼
-                         8001   8002   8003   8004   8005
-                        auth  team  battle pokedex  chat
-                           │      │      │      │      │
-                     auth_db  team_db  battle_db  Redis  chat_db
-                                        │               │
-                                        └──── Kafka ────┘
-                                         battle-events
-                                         chat-messages
+     ┌──────────────────────────────────────────────────────────────────────┐
+     │                       INTERNET / FRONTEND                             │
+     └───────────────────────────────┬──────────────────────────────────────┘
+                                     │ :80
+     ┌───────────────────────────────▼──────────────────────────────────────┐
+     │                        NGINX GATEWAY :80                              │
+     │   /api/auth  /api/teams  /api/battle  /api/pokedex  /api/chat  /ws/  │
+     │              (Routing uniquement — PAS de vérification JWT)          │
+     └────┬──────────────┬──────────────┬──────────────┬──────────────┬─────┘
+          │              │              │              │              │
+          ▼              ▼              ▼              ▼              ▼
+   ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+   │    auth    │ │    team    │ │   battle   │ │  pokedex   │ │    chat    │
+   │   :8001    │ │   :8002    │ │   :8003    │ │   :8004    │ │   :8005    │
+   └──────┬─────┘ └──────┬──┬──┘ └──────┬─────┘ └───┬────┬───┘ └──────┬──┬─┘
+          │              │  │           │            │    │            │  │
+          ▼              ▼  │           ▼            │    ▼            │  ▼
+      [auth_db]      [team_db]│      [battle_db]     │  [Redis]        │ [chat_db]
+                             │                       │  (cache 24h)   │
+                             └──── httpx REST ───────►                │
+                                  (synchrone)      [pokeapi.co]       │
+                                                                       │
+                    ┌──────────────────────────────┐                  │
+     Kafka producer │         KAFKA :29092          │ Kafka consumer   │
+     (battle_svc) ──►   ● topic: battle-events      ├──────────────────┘
+                    │   ● topic: chat-messages      │   (chat_svc lit les 2 topics,
+                    └──────────────────────────────┘    route via msg.topic)
 ```
 
 ---
