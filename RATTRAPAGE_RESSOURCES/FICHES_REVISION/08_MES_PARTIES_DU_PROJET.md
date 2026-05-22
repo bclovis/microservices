@@ -216,7 +216,8 @@ async def kafka_consumer_loop():
     retry_delay = 2    # Délai initial : 2 secondes
     while True:        # Tourne INDÉFINIMENT
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,
+            settings.KAFKA_TOPIC_BATTLE,  # "battle-events"
+            settings.KAFKA_TOPIC_CHAT,    # "chat-messages" (2 topics !)
             bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             auto_offset_reset="latest",   # Lit uniquement les NOUVEAUX messages
         )
@@ -227,16 +228,28 @@ async def kafka_consumer_loop():
             
             async for msg in consumer:   # Boucle sur chaque message
                 event = msg.value
-                if event.get("type") == "turn_played":
-                    # Formater la notification
-                    winner = "Rouge" if event["result"] == "A" else "Bleu"
-                    notif = {
-                        "author": "bot",
-                        "content": f"Tour {event['turn_number']} — {winner} remporte le tour !",
-                        "is_bot": True
-                    }
-                    # Envoyer à tous les clients WebSocket connectés
-                    await chat_service.broadcast_all(notif)
+                topic = msg.topic  # Routing selon le topic source
+                
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    if event.get("type") == "turn_played":
+                        # Formater la notification
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        notif = {
+                            "author": "bot",
+                            "content": f"Tour {turn} — {winner} remporte le tour !",
+                            "is_bot": True
+                        }
+                        # Envoyer à tous les clients WebSocket connectés
+                        await chat_service.broadcast_all(notif)
+                
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)
+                    else:
+                        await chat_service.broadcast_all(event)
         
         except asyncio.CancelledError:
             await consumer.stop()
@@ -274,9 +287,11 @@ async def kafka_consumer_loop():
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_db()                                     # Initialise la BDD
     task = asyncio.create_task(kafka_consumer_loop())  # Démarre le consumer
     yield                                               # L'app tourne
     task.cancel()                                      # Stop le consumer à la fermeture
+    await chat_service.stop_producer()                 # Ferme le producer Kafka
 ```
 
 **Question probable :** "Pourquoi un lifespan et pas directement dans `main()` ?"
@@ -292,7 +307,7 @@ async def lifespan(app: FastAPI):
 
 ```
 Services démarrés :
-├── postgres       → Base de données (3 BDD : auth_db, team_db, battle_db)
+├── postgres       → Base de données (4 BDD : auth_db, team_db, battle_db, chat_db)
 ├── redis          → Cache (pour pokedex_service)
 ├── zookeeper      → Coordinateur de Kafka (obligatoire pour Kafka)
 ├── kafka          → Broker de messages
@@ -320,7 +335,7 @@ chat_service:
 **Question probable :** "Pourquoi `depends_on` ?"
 > "Sans ça, Docker pourrait démarrer battle_service avant que PostgreSQL soit prêt, causant une erreur de connexion. `depends_on` garantit l'ordre."
 
-**⚠️ Limite à connaître :** `depends_on` attend que le conteneur démarre, pas qu'il soit prêt. On a ajouté des healthchecks pour ça (`pg_isready`).
+**⚠️ Limite à connaître :** `depends_on` attend que le conteneur démarre, pas qu'il soit prêt à accepter des connexions. D'où les erreurs de connexion au lancement. La solution robuste serait d'ajouter une logique de retry dans chaque service.
 
 ---
 

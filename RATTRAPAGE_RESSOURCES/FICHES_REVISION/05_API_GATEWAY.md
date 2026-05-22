@@ -365,7 +365,7 @@ async def get_profile(user: str):
 
 ### Q5 : Dans votre projet PokeDrafter, comment utilisez-vous la gateway ?
 **Réponse type :**
-> "On utilise Nginx comme reverse proxy. Le frontend Angular appelle uniquement la gateway (port 80), qui redirige vers auth_service, team_service, battle_service, pokedex_service, et chat_service selon l'URL. La gateway gère aussi le CORS pour autoriser les requêtes depuis le frontend, et vérifie les JWT pour les routes protégées."
+> "On utilise Nginx comme reverse proxy. Le frontend Angular appelle uniquement la gateway (port 80), qui redirige vers auth_service, team_service, battle_service, pokedex_service, et chat_service selon l'URL. La gateway gère aussi le CORS pour autoriser les requêtes depuis le frontend. La vérification JWT est faite par chaque service individuellement via leur `dependencies.py`, pas par Nginx."
 
 ---
 

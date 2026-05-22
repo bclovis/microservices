@@ -122,8 +122,10 @@ async def kafka_consumer_loop():
     while True:
         consumer = AIOKafkaConsumer(
             settings.KAFKA_TOPIC_BATTLE,  # "battle-events"
+            settings.KAFKA_TOPIC_CHAT,    # "chat-messages"
             bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+            auto_offset_reset="latest",
         )
         try:
             await consumer.start()
@@ -132,23 +134,31 @@ async def kafka_consumer_loop():
             # Écouter en continu
             async for msg in consumer:
                 event = msg.value
-                etype = event.get("type", "")
+                topic = msg.topic  # Routing selon le topic source
                 
-                if etype == "turn_played":
-                    # Extraire les infos
-                    result = event.get("result", "?")
-                    turn = event.get("turn_number", "?")
-                    winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
-                    
-                    # Créer notification bot
-                    notif = {
-                        "author": "bot",
-                        "content": f"Tour {turn} — {winner} remporte le tour !",
-                        "is_bot": True
-                    }
-                    
-                    # Envoyer à TOUS les WebSocket connectés
-                    await chat_service.broadcast_all(notif)
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    if event.get("type") == "turn_played":
+                        # Extraire les infos
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        
+                        # Créer notification bot
+                        notif = {
+                            "author": "bot",
+                            "content": f"Tour {turn} — {winner} remporte le tour !",
+                            "is_bot": True
+                        }
+                        
+                        # Envoyer à TOUS les WebSocket connectés
+                        await chat_service.broadcast_all(notif)
+                
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)
+                    else:
+                        await chat_service.broadcast_all(event)
                     
         except Exception as e:
             # Retry avec exponential backoff
@@ -237,9 +247,11 @@ async def kafka_consumer_loop():
     retry_delay = 2  # 👈 IMPORTANT : Valeur initiale
     while True:      # 👈 IMPORTANT : Boucle infinie (lifespan)
         consumer = AIOKafkaConsumer(
-            settings.KAFKA_TOPIC_BATTLE,
+            settings.KAFKA_TOPIC_BATTLE,   # 👈 "battle-events"
+            settings.KAFKA_TOPIC_CHAT,     # 👈 "chat-messages" (2 topics !)
             bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+            auto_offset_reset="latest",
         )
         try:
             await consumer.start()
@@ -248,9 +260,23 @@ async def kafka_consumer_loop():
             retry_delay = 2  # 👈 IMPORTANT : Reset après succès
             
             async for msg in consumer:
-                # Traiter les messages normalement
                 event = msg.value
-                # ...
+                topic = msg.topic  # 👈 IMPORTANT : routing selon la source
+                
+                if topic == settings.KAFKA_TOPIC_BATTLE:
+                    if event.get("type") == "turn_played":
+                        result = event.get("result", "?")
+                        turn = event.get("turn_number", "?")
+                        winner = "Rouge" if result == "A" else ("Bleu" if result == "B" else "Egalité")
+                        notif = {"author": "bot", "content": f"Tour {turn} — {winner} remporte le tour !", "is_bot": True}
+                        await chat_service.broadcast_all(notif)
+                
+                elif topic == settings.KAFKA_TOPIC_CHAT:
+                    room = event.get("room")
+                    if room:
+                        await chat_service.broadcast(room, event)
+                    else:
+                        await chat_service.broadcast_all(event)
                 
         except asyncio.CancelledError:
             await consumer.stop()

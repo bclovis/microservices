@@ -143,8 +143,8 @@ event = {
     "turn_number": 3,
     "pokemon_red": "Dracaufeu",
     "pokemon_blue": "Bulbizarre",
-    "score_red": "8.0",
-    "score_blue": "4.25",
+    "score_red": "4.0",
+    "score_blue": "1.25",
     "result": "A"
 }
 ```
@@ -192,10 +192,10 @@ async def lifespan(app: FastAPI):
 3. chat_service garde la connexion ouverte en mémoire
 4. Quand un event Kafka arrive → `broadcast_all()` envoie à TOUTES les connexions
 
-**Pas de BDD pour le chat :**
-> *"Le chat n'a pas besoin de persistance du tout."* (rapport page 2)
+**Le chat a SA propre BDD (`chat_db`) :**
+> *"Le chat_service dispose d'une base de données dédiée. La fonction `publish_message()` sauvegarde chaque message en BDD AVANT de le publier dans Kafka. La fonction `get_history()` permet de récupérer l'historique depuis la BDD."*
 
-Les messages sont en mémoire → si le service redémarre, l'historique est perdu. C'est un choix délibéré : un chat de notifications PvP n'a pas besoin d'historique persistant.
+Les messages sont persistés dans `chat_db` → l'historique survit aux redémarrages du service.
 
 ---
 
@@ -207,6 +207,6 @@ Les messages sont en mémoire → si le service redémarre, l'historique est per
 | "Pourquoi `while True` ?" | Service qui tourne en permanence, toujours à l'écoute |
 | "C'est quoi le backoff exponentiel ?" | Délai croissant : 2s → 4s → 8s → 30s max pour ne pas spammer Kafka |
 | "Pourquoi reset le délai après succès ?" | Pour ne pas pénaliser les prochaines erreurs temporaires |
-| "Pourquoi pas de BDD dans chat ?" | Pas besoin de persistance pour des notifications PvP temps réel |
+| "chat_service a-t-il une BDD ?" | Oui — `chat_db`. `publish_message()` sauve en BDD avant Kafka. `get_history()` lit depuis la BDD. |
 | "Que se passe-t-il quand Kafka envoie un event ?" | Le consumer le reçoit, formate la notif, broadcast à tous les WebSocket |
 | "Pourquoi `auto_offset_reset="latest"` ?" | On veut seulement les NOUVEAUX events, pas rejouer l'historique au démarrage |

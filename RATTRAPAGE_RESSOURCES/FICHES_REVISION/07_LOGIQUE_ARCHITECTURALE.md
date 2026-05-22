@@ -291,12 +291,17 @@ async def get_pokemon(pokemon_id: int, redis: Redis = Depends(get_redis)):
 
 **Réponse :**
 ```python
-# battle_service/app/kafka_producer.py
-producer = AIOKafkaProducer(
-    bootstrap_servers=KAFKA_BROKER,
-    request_timeout_ms=10000,  # <-- ICI
-    api_version="auto"
-)
+# battle_service/app/services/kafka_service.py
+async def get_producer() -> AIOKafkaProducer:
+    global _producer
+    if _producer is None:
+        p = AIOKafkaProducer(
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        )
+        await p.start()
+        _producer = p
+    return _producer
 ```
 
 ---
@@ -321,10 +326,14 @@ producer = AIOKafkaProducer(
 
 **ÉTAPE 3 :** Fichiers →
 ```python
-# battle_service/app/kafka_producer.py
-async def publish_battle_event(event_type: str, data: dict):
-    logger.info(f"Publishing event: {event_type} - {data}")  # <-- ICI
-    await producer.send("battle-events", ...)
+# battle_service/app/services/kafka_service.py
+async def publish_battle_event(event_type: str, data: dict) -> None:
+    try:
+        producer = await get_producer()
+        payload = {"type": event_type, **data}
+        await producer.send_and_wait(settings.KAFKA_TOPIC_BATTLE, payload)  # <-- ICI
+    except Exception as exc:
+        logger.warning("Kafka unavailable, event dropped: %s", exc)
 
 # chat_service/app/main.py
 async for msg in consumer:

@@ -183,7 +183,7 @@ Le prof va **principalement tester TON CODE** pour vérifier que tu n'as pas jus
 
 **Exemple :** battle_engine.py
 - Lis calc_advantage() ligne par ligne
-- Explique chaque variable (W, X, Y, Z)
+- Explique chaque variable (`w` = type attaquant, `y` = type défenseur, `val` = multiplicateur cumulé, `fa`/`fb` = score final)
 - Dessine le flow
 - Pratique : modifie le code
 - **Temps : 2h → NÉCESSAIRE pour être solide**

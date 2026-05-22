@@ -7,7 +7,7 @@
 
 ## 🎯 PRÉSENTATION (à dire en 30 secondes)
 
-> *"Docker Compose garantit que tout le monde travaille dans le même environnement, quelle que soit la machine. Un seul `docker compose up` démarre les cinq services, PostgreSQL, Redis, Kafka et Nginx. On a ajouté des healthchecks pour éviter que les services démarrent avant que la base soit prête — c'est un problème classique qu'on a rencontré au début."*
+> *"Docker Compose garantit que tout le monde travaille dans le même environnement, quelle que soit la machine. Un seul `docker compose up` démarre les cinq services, PostgreSQL, Redis, Kafka et Nginx. `depends_on` garantit l'ordre de démarrage — c'est un problème classique qu'on a rencontré au début."*
 
 ---
 
@@ -18,7 +18,7 @@
 ```
 Services lancés :
 ├── INFRASTRUCTURE
-│   ├── postgres     → Base de données (3 BDD dans 1 instance)
+│   ├── postgres     → Base de données (4 BDD dans 1 instance)
 │   ├── redis        → Cache (pour pokedex_service)
 │   ├── zookeeper    → Coordinateur Kafka (obligatoire)
 │   └── kafka        → Broker de messages
@@ -34,7 +34,7 @@ Services lancés :
 
 ---
 
-## 2. PostgreSQL — 3 bases en 1 conteneur
+## 2. PostgreSQL — 4 bases en 1 conteneur
 
 ```yaml
 postgres:
@@ -48,12 +48,12 @@ postgres:
     - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql  # Création des BDD
 ```
 
-**Pourquoi 3 BDD dans 1 instance PostgreSQL ?**
+**Pourquoi 4 BDD dans 1 instance PostgreSQL ?**
 > "En dev, on mutualise PostgreSQL pour simplifier. En production, chaque service aurait son propre PostgreSQL. Mais le principe reste : chaque service n'accède QU'À SA base (`battle_service` → `battle_db` uniquement)."
 
 **Le `POSTGRES_MULTIPLE_DATABASES` :**
 - C'est une variable personnalisée traitée par le script `init-db.sql`
-- Ce script crée les 3 bases au premier démarrage
+- Ce script crée les 4 bases au premier démarrage
 
 ---
 
@@ -96,12 +96,11 @@ battle_service:
 **Ce que ça fait :**
 - Docker attend que le conteneur `postgres` soit **démarré** avant de lancer `battle_service`
 
-**⚠️ La limite (à connaître pour l'oral) :**
-> *"On a ajouté des healthchecks `pg_isready` sur PostgreSQL avec `depends_on: condition: service_healthy` pour éviter que les services démarrent avant que la base soit prête — un problème classique qu'on a rencontré au début."* (rapport page 4)
+**⚠️ La limite (importante à connaître) :**
+> *"`depends_on` attend que le conteneur démarre, mais pas qu'il soit réellement prêt à accepter des connexions. PostgreSQL peut démarrer en 1s mais n'être opérationnel qu'en 5s — d'où les erreurs de connexion au démarrage."*
 
 **La différence :**
-- `depends_on` simple → attend que le conteneur DÉMARRE (postgres peut démarrer en 1s, être prêt en 5s)
-- `depends_on: condition: service_healthy` → attend que postgres RÉPONDE à `pg_isready`
+- `depends_on` simple → attend que le conteneur DÉMARRE (pas qu'il soit prêt)
 
 ---
 
@@ -173,9 +172,9 @@ gateway:
 |----------|---------------|
 | "Pourquoi Docker Compose ?" | Même environnement partout, 1 commande pour tout lancer |
 | "Pourquoi `depends_on` ?" | Garantit l'ordre de démarrage |
-| "Pourquoi `depends_on` ne suffit pas ?" | Il attend le démarrage, pas la disponibilité → healthchecks pour ça |
+| "Pourquoi `depends_on` ne suffit pas ?" | Il attend le démarrage, pas la disponibilité — d'où les erreurs de connexion au lancement |
 | "Comment les services se parlent ?" | Via noms de service (réseau interne Docker), pas localhost |
 | "Pourquoi `kafka:29092` ?" | Port interne Docker, distinct du port 9092 exposé sur l'hôte |
 | "Pourquoi Zookeeper ?" | Dépendance obligatoire de Kafka pour gérer les métadonnées du cluster |
 | "Pourquoi des volumes ?" | Persister les données PostgreSQL/Redis entre les redémarrages |
-| "Quelle difficulté rencontrée ?" | Race condition au démarrage : services up avant que PostgreSQL soit prêt → healthchecks |
+| "Quelle difficulté rencontrée ?" | Race condition au démarrage : services up avant que PostgreSQL soit prêt |

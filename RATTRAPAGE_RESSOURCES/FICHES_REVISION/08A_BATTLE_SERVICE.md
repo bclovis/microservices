@@ -175,7 +175,6 @@ async def publish_battle_event(event_type: str, data: dict) -> None:
 | Question | Réponse courte |
 |----------|---------------|
 | "Expliquez F(A) avec un exemple" | Feu vs Plante = get_multiplier("Feu","Plante") = 2.0 → A fort |
-| "Pourquoi dupliquer le type ?" | Équité entre mono-type et bi-type |
 | "Pourquoi BDD avant Kafka ?" | Le tour est critique, la notif non. Si Kafka down, jeu continue |
 | "Que se passe-t-il si Kafka est down ?" | Exception attrapée, event droppé, tour quand même sauvegardé |
 | "C'est quoi `resolve_turn()` ?" | Compare fa et fb, retourne A/B/draw |
