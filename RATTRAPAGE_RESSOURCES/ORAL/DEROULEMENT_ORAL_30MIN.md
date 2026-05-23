@@ -1,282 +1,170 @@
 # 📋 DÉROULEMENT DE L'ORAL - 30 MINUTES
 
+> **Consigne officielle (Raphaël LALANNE) :**
+> - 15 premières minutes : questions de cours + application dans des cas pratiques
+> - 15 dernières minutes : tu présentes ta partie du projet + tu expliques tes choix
+>
+> **Tu passes : vendredi 29 mai à 20h**
+
+---
+
 ## ⏱️ PARTIE 1 : THÉORIE (15 min)
 
-### Minutes 0-2 : Installation
-- Tu rentres, tu t'assois
-- Prof : "Bonjour, vous êtes prêt ? On commence"
-- Pas de présentation longue, direct au sujet
+### Ce que ça veut dire
+Le prof te pose des questions sur les concepts du cours microservices. Il peut aussi inventer un cas pratique ("j'ai un service X et un service Y, comment tu fais ?"). Il n'y a pas de script prévu — il pose ce qu'il veut.
 
----
+### Questions de cours à maîtriser
 
-### Minutes 2-7 : Questions théoriques rapides
-Prof va poser **4-5 questions basiques** pour tester si t'as les bases :
+**Monolithe vs Microservices :**
+- Monolithe = tout dans 1 seul processus → si ça plante, tout plante
+- Microservices = 1 service = 1 responsabilité → scalabilité indépendante, isolation des pannes
 
-**Questions probables :**
-- "C'est quoi la différence entre monolithe et microservices ?"
-- "Pourquoi vous avez choisi Kafka ?"
-- "Expliquez-moi le pattern SAGA en 2 phrases"
-- "C'est quoi un API Gateway ?"
-- "Comment on scale avec Kubernetes ?"
+**Kafka vs REST inter-service :**
+- REST = synchrone, le service attend la réponse → couplage fort
+- Kafka = asynchrone, le service publie et continue → découplage, résilience si l'autre est down
 
-**⚠️ PIÈGE** : Si tu bloques sur une question basique → il insiste → tu perds du temps
+**Database-per-service :**
+- Chaque service a SA BDD (auth_db, team_db, battle_db, chat_db)
+- Pas de JOIN entre services → les services sont autonomes
+- Inconvénient : pas de transactions distribuées faciles
 
----
+**API Gateway :**
+- Point d'entrée unique pour tous les clients
+- Dans PokeDrafter : Nginx route vers les 5 services, gère CORS, WebSocket
+- Ne vérifie PAS le JWT — chaque service le vérifie lui-même
 
-### Minutes 7-12 : Question de fond
-Il va choisir **UN sujet** et creuser :
-- Soit communication asynchrone (Kafka)
-- Soit gestion des données (database-per-service)
-- Soit orchestration (Kubernetes)
+**Kubernetes / scaling :**
+- HPA (HorizontalPodAutoscaler) : crée des pods si CPU > seuil
+- Le Service K8s fait le load balancing automatiquement entre les pods
+- Namespace `pokedrafter` pour isoler les ressources
 
-**Exemple de question :**
-> "Vous utilisez Kafka dans votre projet. Que se passe-t-il si le chat_service est down quand battle_service envoie un event ?"
+### Cas pratiques possibles
 
-**Réponse attendue :**
-- L'event reste dans Kafka (persistance)
-- Quand chat_service redémarre, il consomme les events en attente
-- C'est pour ça qu'on utilise Kafka et pas REST
+**"Ajoutez un service de notifications email"**
+> Nouveau microservice `notification_service`, s'abonne au topic Kafka `battle-events`, envoie un email quand une bataille se termine, sa propre BDD pour l'historique.
 
----
-
-### Minutes 12-15 : Cas pratique théorique
-**Exemple :**
-> "Si je vous demande d'ajouter un service de notifications email, vous le feriez comment ?"
-
-**Ce qu'il teste :** Si t'as compris l'architecture, pas si tu sais coder
-
-**Bonne réponse :**
-1. Nouveau microservice `notification_service`
-2. S'abonne au topic Kafka `battle-events`
-3. Envoie un email quand bataille terminée
-4. Base de données séparée pour l'historique des notifications
+**"Que se passe-t-il si chat_service est down ?"**
+> L'event `turn_played` reste dans Kafka. Quand chat_service redémarre, il consomme les events en attente. C'est précisément pour ça qu'on utilise Kafka et pas un appel REST direct.
 
 ---
 
 ## 🖥️ PARTIE 2 : PROJET (15 min)
 
-### Minutes 15-17 : Présentation rapide
-- "Présentez-moi votre architecture en 2 minutes"
-- Tu montres le schéma (si t'en as un) ou tu expliques oralement
-- Les 5 services + leurs rôles
-
-**Ce que tu dis :**
-> "J'ai 5 microservices : auth pour l'authentification JWT, pokedex pour les données Pokémon, team pour la gestion des équipes, battle pour les combats avec calcul d'avantages de types, et chat pour les notifications temps réel via WebSocket. Ils communiquent de façon asynchrone via Kafka."
+### Ce que ça veut dire
+Tu présentes **ta partie** (battle, chat, docker, k8s) et tu expliques **pourquoi** tu as fait les choses comme ça. Pas de slides. Le prof regarde ton code avec toi et te pose des questions dessus.
 
 ---
 
-### Minutes 17-25 : Code Deep Dive
-Le prof va choisir **UN fichier** et te demander de l'expliquer ligne par ligne.
+### Ta partie selon les consignes officielles
+> Battle Service, Chat Service, Kafka integration, Docker, Kubernetes
 
-#### 🎯 Scénario 1 : battle_service/routes/battle.py (LE PLUS PROBABLE)
+---
 
-**Questions attendues :**
-- "Expliquez-moi la route `play_turn()`"
-- "Pourquoi vous publiez l'event APRÈS avoir enregistré en BDD ?"
-- "Que se passe-t-il si Kafka est down ici ?"
+### Ce que tu dois être capable d'expliquer
 
-**Ce que tu dois expliquer :**
+#### battle_service — `routes/battle.py` → route `play_turn`
+
 ```python
-@router.post("/{battle_id}/turn", response_model=TurnResult)
-async def play_turn(battle_id: UUID, payload: TurnPlay, db: AsyncSession = Depends(get_db)):
-    # 1. Calcul des avantages de types
-    fa, fb = calc_advantage(payload.types_red, payload.types_blue)
-    
-    # 2. Détermination du gagnant
-    result = resolve_turn(payload.types_red, payload.types_blue)
-    
-    # 3. Sauvegarde en BDD
-    turn = BattleTurn(...)
-    db.add(turn)
-    await db.commit()
-    
-    # 4. Publication asynchrone dans Kafka
-    await publish_battle_event("turn_played", {...})
-    
-    # 5. Retour immédiat au client
-    return turn
+# 1. Calcul des avantages de types
+fa, fb = calc_advantage(types_red, types_blue)   # battle_engine.py
+result = resolve_turn(types_red, types_blue)      # "A", "B" ou "draw"
+
+# 2. Sauvegarde en BDD D'ABORD
+db.add(BattleTurn(...))
+await db.commit()
+
+# 3. Kafka APRÈS
+await publish_battle_event("turn_played", {...})
 ```
 
-**Points à mentionner :**
-- ✅ Persistance d'abord (BDD), notification après
-- ✅ Si Kafka fail, le tour est quand même enregistré
-- ✅ publish_battle_event est async mais on attend pas la réponse du chat_service
-- ⚠️ Redondance : `calc_advantage()` appelé 2 fois (dans resolve_turn aussi)
+**Tes choix à justifier :**
+- BDD avant Kafka → si Kafka fail, le tour est quand même enregistré
+- `battle_engine.py` séparé des routes → calcul pur, testable seul, pas de dépendance BDD
+- `kafka_service.py` avec producer lazy (singleton) → créé au 1er appel, pas au démarrage
 
 ---
 
-#### 🎯 Scénario 2 : chat_service/main.py
+#### chat_service — `main.py` → `kafka_consumer_loop`
 
-**Questions attendues :**
-- "Expliquez-moi ce consumer Kafka"
-- "C'est quoi ce `retry_delay` ?"
-- "Pourquoi un `while True` ?"
-
-**Ce que tu dois expliquer :**
 ```python
-async def kafka_consumer_loop():
-    retry_delay = 2
-    while True:
-        try:
-            consumer = AIOKafkaConsumer(...)
-            await consumer.start()
-            retry_delay = 2  # Reset après succès
-            
-            async for msg in consumer:
-                # Traitement du message
-                ...
-        except Exception as e:
-            await asyncio.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 30)  # Exponential backoff
+while True:                        # tourne en continu
+    try:
+        consumer = AIOKafkaConsumer(
+            "battle-events",       # topic 1
+            "chat-messages",       # topic 2
+        )
+        await consumer.start()
+        retry_delay = 2            # reset après succès
+        async for msg in consumer:
+            if msg.topic == "battle-events": ...
+            elif msg.topic == "chat-messages": ...
+    except Exception:
+        await asyncio.sleep(retry_delay)
+        retry_delay = min(retry_delay * 2, 30)  # 2→4→8→16→30s max
 ```
 
-**Points à mentionner :**
-- ✅ `while True` : service qui tourne en continu
-- ✅ Retry exponentiel : 2s → 4s → 8s → 16s → 30s max
-- ✅ Reset après succès : ne pénalise pas les erreurs temporaires
-- ✅ Résilience : si Kafka crash, le service réessaye automatiquement
+**Tes choix à justifier :**
+- `while True` → le consumer doit tourner indéfiniment, c'est son rôle
+- Retry exponentiel → si Kafka est temporairement down, on ne spam pas les reconnexions
+- 2 topics dans 1 consumer → 1 seule boucle gère tout, routage via `msg.topic`
+- `asyncio.create_task()` dans lifespan → tourne en arrière-plan sans bloquer le serveur HTTP
 
 ---
 
-#### 🎯 Scénario 3 : auth_service (moins probable)
+#### docker-compose
 
-**Questions attendues :**
-- "Comment vous gérez les JWT ?"
-- "Où est stocké le secret ?"
-- "Combien de temps est valide un token ?"
-
----
-
-### Minutes 25-28 : Questions de modification
-
-**Exemples de questions :**
-- "Si je vous demande d'ajouter un timeout sur Kafka, où vous le mettez ?"
-  → Dans la config du producer : `request_timeout_ms=10000`
-
-- "Comment vous feriez pour logger tous les events ?"
-  → Middleware dans battle_service avant publish + logging dans chat_service après consommation
-
-- "Si le battle dure trop longtemps, comment vous gérez ?"
-  → Ajouter un champ `max_turns` dans la table battles + vérification avant chaque tour
+**Tes choix à justifier :**
+- 4 BDD séparées (auth_db, team_db, battle_db, chat_db) → database-per-service, chaque service est autonome
+- `depends_on` simple sans healthcheck → limitation connue, en prod on ajouterait `pg_isready`
+- `restart: always` → si un service crash, Docker le redémarre automatiquement
+- Kafka sur port `29092` en interne et `9092` exposé → réseau Docker interne vs accès depuis l'hôte
 
 ---
 
-### Minutes 28-30 : Conclusion
-- "Vous avez des questions ?"
-- Ou "Ok merci, vous pouvez sortir"
+#### Kubernetes
+
+**Tes choix à justifier :**
+- Namespace `pokedrafter` → isolation des ressources du projet
+- 5 Deployments + 5 Services ClusterIP → chaque service accessible uniquement en interne
+- Gateway en NodePort `30080` → seul point d'entrée exposé vers l'extérieur
+- Nginx comme gateway → routing centralisé, CORS, WebSocket
 
 ---
 
-## 🎯 CE QUI FAIT VRAIMENT LA DIFFÉRENCE
+### Si le prof demande "qu'est-ce que vous changeriez ?"
 
-### ✅ À FAIRE
-- Répondre **vite** aux questions basiques (gagne du temps pour le code)
-- Dire **"je sais pas"** plutôt que d'inventer (le prof préfère l'honnêteté)
-- Montrer la **logique** : "Ici j'ai fait ça PARCE QUE..."
-- Avoir **UN truc que tu maîtrises à fond** (genre l'avantage de types)
-
-### ❌ À ÉVITER
-- Inventer des réponses
-- Parler trop vite ou trop lentement
-- Dire "j'ai oublié" pour tout
-- Critiquer ton propre code négativement
+| Ce qui manque | Ce que tu dirais |
+|---------------|-----------------|
+| Healthchecks | Ajouter `condition: service_healthy` + `pg_isready` dans docker-compose |
+| Event `battle_ended` | Ajouter `publish_battle_event("battle_ended", ...)` dans la route `/end` |
+| HPA Kubernetes | Ajouter un HorizontalPodAutoscaler sur battle_service (beaucoup de calculs CPU) |
 
 ---
 
-## 🔥 QUESTIONS PIÈGES CLASSIQUES
+## ✅ À FAIRE / ❌ À ÉVITER
 
-### 1. "Pourquoi pas un monolithe ?"
-**Réponse attendue :**
-- Scalabilité indépendante (scale battle_service sans scaler auth)
-- Déploiement séparé (mise à jour chat sans redémarrer tout)
-- Technologies différentes possibles (Python + Node.js + Go)
-- Isolation des pannes (si chat crash, auth continue)
-
-### 2. "C'est quoi la différence entre GET et POST ?"
-**⚠️ Si tu hésites = mauvais signe**
-- GET : récupération de données (idempotent)
-- POST : création de ressources (non idempotent)
-- PUT : mise à jour complète
-- DELETE : suppression
-
-### 3. "Kafka vs REST, pourquoi ?"
-**Réponse :**
-- **Asynchrone** : battle_service ne bloque pas en attendant chat_service
-- **Découplage** : services ne se connaissent pas directement
-- **Retry automatique** : si chat_service down, les events sont conservés
-- **Performance** : pas de timeout HTTP à gérer
-
-### 4. "Vous avez testé votre code ?"
-**⚠️ Sois honnête :**
-- "Pas de tests unitaires automatisés"
-- "J'ai testé manuellement avec Postman/curl"
-- "J'ai vérifié les logs Docker"
-- *(Si tu mens, il peut demander de les montrer)*
-
-### 5. "C'est quoi database-per-service ?"
-**Réponse :**
-- Chaque microservice a **sa propre BDD**
-- battle_service → `battle_db`
-- auth_service → `auth_db`
-- **Avantage** : isolation, pas de dépendance
-- **Inconvénient** : pas de JOIN entre services
+| ✅ À FAIRE | ❌ À ÉVITER |
+|-----------|------------|
+| Dire "j'ai fait ça PARCE QUE..." | Inventer une réponse |
+| Dire "je ne suis pas sûr mais je dirais que..." si tu bloques | Silence total |
+| Parler lentement, prendre 5 secondes pour réfléchir | Critiquer ton propre code sans proposer d'amélioration |
 
 ---
 
-## 📊 RÉPARTITION DU TEMPS
+## 🎓 CE QU'IL FAUT ABSOLUMENT MAÎTRISER
 
-| Phase | Temps | Contenu |
-|-------|-------|---------|
-| Questions théoriques rapides | 5 min | 4-5 questions de base |
-| Question de fond | 5 min | 1 sujet creusé (Kafka, BDD, K8s) |
-| Cas pratique | 3 min | "Ajoutez un service X" |
-| Présentation archi | 2 min | Les 5 services + schéma |
-| Explication code | 8 min | 1 fichier détaillé |
-| Questions modification | 3 min | "Et si..." |
-| Conclusion | 4 min | Questions/sortie |
-
----
-
-## 🎯 PRÉDICTIONS RÉALISTES
-
-### Si tu finis le plan à 75% :
-**Note attendue : 10-12/20** ✅ (PASSAGE)
-- Tu réponds aux questions basiques
-- Tu expliques battle.py ou chat main.py correctement
-- Tu montres que tu comprends la logique
-
-### Si tu bachottes juste la veille :
-**Note attendue : 6-8/20** ❌ (RATÉ)
-- Tu hésites sur les bases
-- Tu ne sais pas expliquer ton code
-- Le prof sent que tu as juste lu sans comprendre
-
-### Si tu maîtrises tes 3 piliers + théorie :
-**Note attendue : 12-14/20** 🎉 (BIEN)
-- Tu réponds avec assurance
-- Tu proposes des améliorations
-- Tu montres une vraie compréhension
-
----
-
-## 🎓 TON OBJECTIF : PASSAGE (10/20)
-
-**Ce qu'il faut ABSOLUMENT maîtriser :**
-1. **battle_service** : play_turn() ligne par ligne
-2. **chat_service** : kafka_consumer_loop() + retry logic
-3. **Kafka** : pourquoi asynchrone, que se passe-t-il si service down
-4. **Monolithe vs Microservices** : 3 avantages, 3 inconvénients
-5. **Types Pokémon** : avantage Feu vs Plante = 2x (ton truc unique)
-
-**Si tu maîtrises ces 5 points = 10/20 GARANTI** ✅
+1. `play_turn()` dans `battle_service/routes/battle.py` — ligne par ligne
+2. `kafka_consumer_loop()` dans `chat_service/main.py` — while True + retry + 2 topics
+3. `docker-compose.yml` — 4 BDD + Kafka + pourquoi depends_on sans healthcheck
+4. Kubernetes — namespace, Deployment, ClusterIP, NodePort 30080
+5. Théorie — Kafka vs REST, database-per-service, monolithe vs microservices
 
 ---
 
 ## 💪 DERNIERS CONSEILS
 
-1. **La veille de l'oral** : Relis juste battle.py et chat main.py, ne découvre rien de nouveau
-2. **Le matin même** : Relis la fiche 01 (Introduction Microservices)
-3. **Dans la salle** : Respire, parle lentement, c'est OK de réfléchir 5 secondes avant de répondre
-4. **Si tu bloques** : "Je ne suis pas sûr mais je dirais que..." (mieux que le silence)
+- **Jeudi 28** : Relis battle.py et chat main.py à voix haute
+- **Vendredi 29 matin** : Relis la fiche 01 (Introduction Microservices)
+- **À 20h dans la salle** : Respire, parle lentement, c'est OK de réfléchir avant de répondre
 
 **BON COURAGE ! 🚀**

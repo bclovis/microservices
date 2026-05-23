@@ -33,8 +33,8 @@
                     ┌──────────────────────────────┐                  │
      Kafka producer │         KAFKA :29092          │ Kafka consumer   │
      (battle_svc) ──►   ● topic: battle-events      ├──────────────────┘
-                    │   ● topic: chat-messages      │   (chat_svc lit les 2 topics,
-                    └──────────────────────────────┘    route via msg.topic)
+                    └──────────────────────────────┘   (chat_svc consomme
+                                                        uniquement battle-events)
 ```
 
 ---
@@ -258,23 +258,20 @@ app/
 └── services/chat_service.py ← Producer Kafka + broadcast WebSocket + get_history()
 ```
 
-**Ce qui est important — subscribe à 2 topics :**
+**Ce qui est important — subscribe à 1 seul topic :**
 ```python
-# main.py — consumer écoute battle-events ET chat-messages
+# main.py — consumer écoute UNIQUEMENT battle-events (pas chat-messages)
 consumer = AIOKafkaConsumer(
-    settings.KAFKA_TOPIC_BATTLE,   # "battle-events"
-    settings.KAFKA_TOPIC_CHAT,     # "chat-messages"
+    settings.KAFKA_TOPIC_BATTLE,   # "battle-events" — 1 seul topic
     bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
     auto_offset_reset="latest",
 )
 async for msg in consumer:
-    topic = msg.topic  # Routing selon la source
-    if topic == settings.KAFKA_TOPIC_BATTLE:
-        # Transformer l'event en notification bot
+    event = msg.value
+    if event.get("type") == "turn_played":
+        winner = "Rouge" if event["result"] == "A" else ("Bleu" if event["result"] == "B" else "Egalité")
+        notif = {"author": "bot", "content": f"Tour {event['turn_number']} — {winner} remporte le tour !", "is_bot": True}
         await chat_service.broadcast_all(notif)
-    elif topic == settings.KAFKA_TOPIC_CHAT:
-        room = event.get("room")
-        await chat_service.broadcast(room, event) if room else await chat_service.broadcast_all(event)
 ```
 
 **Lifespan (le plus complet du projet) :**
@@ -416,7 +413,7 @@ battle_service/dependencies.py :
 | **4 BDD séparées** | Database-per-service : isolation, scalabilité, autonomie |
 | **JWT dans chaque service** | Autonomie — pas de dépendance à auth_service pour valider |
 | **httpx async** | Client HTTP async cohérent avec le reste du code FastAPI |
-| **2 topics Kafka** | `battle-events` (battle→chat), `chat-messages` (chat→chat) — séparation des responsabilités |
+| **1 topic Kafka consommé** | `battle-events` uniquement — chat_service écoute les events de bataille et les broadcast en WebSocket |
 
 ---
 
