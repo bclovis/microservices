@@ -665,6 +665,168 @@ TYPE_CHART = { ... }
 
 ---
 
+---
+
+## PARTIE F — FAIBLESSES RÉELLES DU CODE (À ASSUMER HONNÊTEMENT)
+
+> Ces problèmes existent vraiment dans le code. Le prof les verra si il regarde. Vaut mieux les nommer toi-même que d'être pris en défaut.
+
+---
+
+### F1 — ⚠️ LES ROUTES BATTLE N'ONT PAS D'AUTHENTIFICATION
+
+**Code réel (`routes/battle.py`) :**
+```python
+@router.post("/{battle_id}/turn", response_model=TurnResult)
+async def play_turn(battle_id: UUID, payload: TurnPlay, db: AsyncSession = Depends(get_db)):
+    # ← pas de current_user, pas de JWT, pas de vérification qui tu es
+```
+
+**Problème :**
+- N'importe qui peut appeler `POST /battles/{id}/turn` sans être connecté
+- N'importe qui peut appeler `POST /battles/{id}/end` ou `/forfeit` sans être le joueur concerné
+- Toutes les routes battle acceptent des requêtes anonymes
+
+**Ce que tu dois dire si le prof le remarque :**
+> "Oui, c'est une erreur de conception — les routes auraient dû avoir `current_user: User = Depends(get_current_user)` comme dans auth_service. On vérifie le JWT, on récupère l'utilisateur, et on vérifie que `current_user.id == battle.player_red_id` ou `player_blue_id`. On ne l'a pas implémenté."
+
+**Ce qu'il aurait fallu faire :**
+```python
+async def play_turn(
+    battle_id: UUID,
+    payload: TurnPlay,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)  # ← manquant
+):
+    if str(current_user.id) not in (str(battle.player_red_id), str(battle.player_blue_id)):
+        raise HTTPException(403, "Pas un joueur de cette bataille")
+```
+
+---
+
+### F2 — ⚠️ LE JWT SECRET PAR DÉFAUT EST INSÉCURISÉ
+
+**Code réel (`battle_service/app/core/config.py`) :**
+```python
+JWT_SECRET: str = "change-me-in-production"
+```
+
+**Problème :**
+- Si la variable d'environnement `JWT_SECRET` n'est pas définie, le secret est `"change-me-in-production"` — connu de tous
+- Un attaquant peut forger des tokens JWT valides avec ce secret
+
+**Ce que tu dois dire :**
+> "C'est un placeholder qui devait être surchargé par une variable d'environnement. En production, on utiliserait un secret fort (32+ caractères aléatoires) via un secret manager (Kubernetes Secrets, Vault), jamais en clair dans le code."
+
+---
+
+### F3 — ⚠️ USERNAME WEBSOCKET SANS AUTHENTIFICATION
+
+**Code réel (`chat_service/routes/chat.py`) :**
+```python
+@router.websocket("/ws/chat/{team}")
+async def chat_endpoint(
+    websocket: WebSocket,
+    team: str,
+    username: str = Query(...)   # ← juste un paramètre URL, pas vérifiable
+):
+```
+
+**Problème :**
+- `username` est passé en query param : `ws://host/ws/chat/red?username=Betsaleel`
+- N'importe qui peut se connecter en prétendant être n'importe qui
+- Pas de vérification JWT sur la connexion WebSocket
+
+**Ce que tu dois dire :**
+> "Le username vient du client sans vérification. Il aurait fallu passer un token JWT dans le header WebSocket (ou en query param `token=...`) et vérifier l'identité côté serveur avant d'accepter la connexion. C'est une limitation connue."
+
+---
+
+### F4 — ⚠️ ZÉRO TEST DANS LE PROJET
+
+**Constat :**
+```bash
+find . -name "test_*" -o -name "*_test.py"
+# → aucun résultat
+```
+
+**Ce que tu dois dire si le prof demande :**
+> "Il n'y a pas de tests automatisés dans le projet. Ce qu'on aurait dû faire :
+> - Tests unitaires de `battle_engine.py` (fonction pure, trivial à tester)
+> - Tests d'intégration sur les routes avec pytest + httpx + une BDD de test
+> - Le seul 'test' fait était manuel via curl/Postman"
+
+---
+
+### F5 — `score_red` / `score_blue` stockés comme String au lieu de Float
+
+**Code réel (`models/battle.py`) :**
+```python
+score_red = Column(String(20), nullable=True)   # ex: "2.0"
+score_blue = Column(String(20), nullable=True)  # ex: "0.5"
+```
+
+**Problème :**
+- `calc_advantage` retourne des floats (ex: `2.0`, `0.5`) — on les stocke en string
+- Impossible de faire des requêtes SQL comme `WHERE score_red > score_blue`
+- Il aurait fallu `Float` ou `Numeric`
+
+**Ce que tu dois dire :**
+> "Les scores sont des floats stockés en string — c'est une incohérence de type. En prod on aurait utilisé `Column(Numeric(10, 4))` pour pouvoir faire des agrégations SQL dessus."
+
+---
+
+### F6 — WebSockets pas scalables (in-memory connections)
+
+**Code réel (`chat_service/services/chat_service.py`) :**
+```python
+_connections: Dict[str, List[WebSocket]] = defaultdict(list)
+```
+
+**Problème :**
+- Les connexions WebSocket sont stockées **en mémoire** du processus
+- Avec `replicas: 2`, pod A a ses connexions et pod B a les siennes
+- Si un message arrive sur pod A, les clients connectés sur pod B ne le reçoivent PAS
+- Kafka sert à contourner ça partiellement (le message passe par Kafka → tous les pods consomment et broadcastent à leurs connexions locales), mais c'est fragile
+
+**Ce que tu dois dire :**
+> "Le broadcast est local à chaque instance. Le passage par Kafka permet à toutes les instances de recevoir le message et le renvoyer à leurs clients locaux — c'est le bon pattern pour le scaling de WebSockets. Mais avec `replicas: 1`, c'est suffisant pour le projet."
+
+---
+
+### F7 — Code commenté laissé en place
+
+**Code réel (`chat_service/routes/chat.py`) :**
+```python
+# User requested to remove "joined" message
+# join_msg = { ... }
+# await chat_service.publish_message(join_msg)
+```
+
+Et dans `battle_engine.py` :
+```python
+# import random  # utilisé pour debug, à enlever plus tard
+```
+
+**Ce que tu dois dire si le prof remarque :**
+> "Code de développement non nettoyé avant rendu — en prod, on aurait supprimé tous les commentaires de debug et le code mort."
+
+---
+
+### SYNTHÈSE — CE QUE TU ASSUMES À L'ORAL
+
+| Problème | Gravité | Ce que tu dis |
+|---------|---------|---------------|
+| Pas d'auth sur les routes battle | 🔴 Critique | "Manque `get_current_user` + vérification ownership" |
+| JWT secret en dur | 🔴 Critique | "Placeholder, devait être une env var forte" |
+| Username WebSocket non vérifié | 🟠 Important | "Aurait fallu vérifier un token JWT à la connexion" |
+| Zéro test | 🟠 Important | "Tests manuels uniquement, pas de pytest" |
+| score_red en String | 🟡 Mineur | "Incohérence de type, aurait fallu Float" |
+| Code commenté/debug | 🟡 Mineur | "Non nettoyé avant rendu" |
+| No `battle_ended` event | 🟡 Mineur | "Route /end existe mais ne publie pas sur Kafka" |
+
+---
+
 ## RÉCAP RAPIDE — LES 10 CHOIX LES PLUS PROBABLES À L'ORAL
 
 | # | Question | Réponse en 1 phrase |
