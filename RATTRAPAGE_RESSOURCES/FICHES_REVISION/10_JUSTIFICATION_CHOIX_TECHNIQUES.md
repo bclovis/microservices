@@ -132,7 +132,38 @@ async def publish_battle_event(event_type: str, data: dict) -> None:
 
 ---
 
-### A6 — Il n'y a PAS d'event `battle_ended`
+### A6 — Le créateur est toujours rouge, le rejoignant est toujours bleu
+
+**Code réel (`schemas/battle.py`) :**
+```python
+class BattleCreate(BaseModel):
+    player_red_id: UUID          # obligatoire — c'est le créateur
+    player_blue_id: Optional[UUID] = None   # optionnel — peut rejoindre plus tard
+    mode: str = "construit"
+```
+
+**Question :** "Pourquoi on ne peut pas choisir sa couleur ? C'est un peu limitant non ?"
+
+**Réponse honnête — assumer la limite :**
+> "Oui, c'est une simplification. On a décidé que le créateur = rouge et le rejoignant = bleu pour éviter de gérer l'assignation de couleur côté serveur. Dans l'état actuel, si deux joueurs veulent tous les deux jouer rouge, ce n'est pas possible."
+
+**La vraie justification du choix :**
+- Simplifie le code : pas de logique "est-ce que rouge est déjà pris ?"
+- Le créateur a naturellement le rôle "premier joueur" (rouge = attaquant par convention)
+- La route `/join` assignation automatique de bleu suffit pour le cas d'usage du projet
+
+**Ce qu'on aurait dû faire en prod :**
+```python
+class BattleCreate(BaseModel):
+    player_red_id: UUID
+    player_blue_id: Optional[UUID] = None
+    preferred_color: Literal["red", "blue"] = "red"  # ← choix du joueur
+```
+Et avec l'auth : vérifier que `current_user.id == player_red_id` (pas n'importe qui peut créer au nom d'un autre).
+
+---
+
+### A7 — Il n'y a PAS d'event `battle_ended`
 
 **Code réel (route `/end`) :**
 ```python
