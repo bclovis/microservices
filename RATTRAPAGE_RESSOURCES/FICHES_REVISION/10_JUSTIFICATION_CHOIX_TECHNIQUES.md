@@ -825,6 +825,35 @@ _connections: Dict[str, List[WebSocket]] = defaultdict(list)
 
 ---
 
+### F8 — `kafka_consumer_loop` définie dans `main.py` au lieu d'un fichier dédié
+
+**Code réel (`chat_service/app/main.py`) :**
+```python
+async def kafka_consumer_loop():   # ← 60 lignes dans main.py
+    ...
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(kafka_consumer_loop())
+    yield
+    task.cancel()
+```
+
+**Problème :** `main.py` devrait être minimaliste (démarrer l'app, déclarer le lifespan). La logique métier du consumer Kafka (retry, parsing des events, broadcast) aurait dû être dans `kafka_consumer.py` ou `services/kafka_service.py`.
+
+**Pourquoi c'est là :** La loop est intimement liée au `lifespan` FastAPI — c'est là que le cycle de vie de l'app est géré. Pour éviter une dépendance circulaire rapide entre modules, elle a été laissée dans `main.py`.
+
+**Ce que tu aurais dû faire :**
+```
+services/kafka_consumer.py  ← définit kafka_consumer_loop()
+main.py                     ← importe et lance dans lifespan
+```
+
+**Ce que tu dis à l'oral :**
+> *"En refactoring, j'aurais sorti la loop dans un `kafka_consumer.py` dédié pour respecter la séparation des responsabilités. `main.py` ne devrait contenir que le bootstrap de l'application."*
+
+---
+
 ### F7 — Code commenté laissé en place
 
 **Code réel (`chat_service/routes/chat.py`) :**
