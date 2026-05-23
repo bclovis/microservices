@@ -184,18 +184,71 @@ async def lifespan(app: FastAPI):
 
 ---
 
-## 6. WebSocket — comment ça fonctionne
+## 6. WebSocket — c'est quoi et comment ça fonctionne
 
-**Ce que fait chat_service côté WebSocket :**
-1. Client (navigateur) ouvre une connexion `ws://localhost/ws/`
-2. Nginx transfère vers `chat_service:8005`
-3. chat_service garde la connexion ouverte en mémoire
-4. Quand un event Kafka arrive → `broadcast_all()` envoie à TOUTES les connexions
+### Qu'est-ce qu'un WebSocket ?
+
+**HTTP classique :** le client envoie une requête → le serveur répond → la connexion se ferme. Le serveur ne peut jamais envoyer quelque chose tout seul.
+
+**WebSocket :** le client ouvre une connexion → elle **reste ouverte** → les deux côtés peuvent s'envoyer des messages à tout moment, sans nouvelle requête.
+
+```
+HTTP :    Client → [requête] → Serveur → [réponse] → connexion fermée
+
+WebSocket: Client ←——— connexion persistante ———→ Serveur
+                  ← push message à tout moment →
+```
+
+**Pourquoi on en a besoin ici :** le chat doit afficher les messages en temps réel. Sans WebSocket, le navigateur devrait poller (GET toutes les Xs) pour vérifier s'il y a de nouveaux messages — lent et inefficace.
+
+---
+
+### Comment ça fonctionne dans le projet
+
+**URL de connexion :**
+```
+ws://localhost/ws/chat/red?username=Betsaleel
+ws://localhost/ws/chat/blue?username=Betsaleel
+```
+
+- `red` ou `blue` = la "room" (salle de chat)
+- `username` = query param (non vérifié — faille F3 de la fiche 10)
+
+**Étapes :**
+
+```
+1. Angular ouvre : new WebSocket("ws://host/ws/chat/red?username=...")
+2. Nginx route vers chat_service:8005
+3. chat_service accepte la connexion → ajoute le WebSocket dans :
+       _connections = { "red": [ws1, ws2, ...], "blue": [ws3, ...] }
+4. Connexion reste ouverte indéfiniment
+5. Quand un event arrive (message utilisateur OU event Kafka) :
+       broadcast("red", message)  → envoie à TOUS les ws de la room "red"
+       broadcast_all(message)     → envoie à TOUS les ws toutes rooms confondues
+6. Quand l'utilisateur ferme l'onglet → WebSocket se ferme → retiré de _connections
+```
+
+**Les connexions sont stockées en mémoire (dans le processus Python) :**
+```python
+_connections: Dict[str, List[WebSocket]] = {}
+```
+C'est la **faille F6** — si on passe à 2 replicas K8s, chaque replica a ses propres `_connections`. Un message envoyé au replica 1 n'atteint pas les clients connectés au replica 2.
+
+---
+
+### Ce que fait chat_service côté WebSocket dans le code
+
+```
+Client envoie un message via WebSocket
+    → chat_service reçoit
+    → sauvegarde en chat_db (persistance)
+    → publie dans Kafka topic "chat-messages"
+    → kafka_consumer_loop reçoit l'event
+    → broadcast à tous les connectés
+```
 
 **Le chat a SA propre BDD (`chat_db`) :**
-> *"Le chat_service dispose d'une base de données dédiée. La fonction `publish_message()` sauvegarde chaque message en BDD AVANT de le publier dans Kafka. La fonction `get_history()` permet de récupérer l'historique depuis la BDD."*
-
-Les messages sont persistés dans `chat_db` → l'historique survit aux redémarrages du service.
+Les messages sont persistés dans `chat_db` → l'historique survit aux redémarrages du service. `get_history()` lit depuis la BDD.
 
 ---
 
