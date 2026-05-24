@@ -89,7 +89,7 @@ curl -H "X-API-Key: secret-api-key-123" http://localhost:8000/users
 ```
 
 ### 3. **Rate Limiting**
-Limite le nombre de requêtes par client.
+Limite le nombre de requêtes par client. Retourne **HTTP 429 Too Many Requests** si dépassé.
 
 ```python
 from slowapi import Limiter
@@ -102,6 +102,30 @@ limiter = Limiter(key_func=get_remote_address)
 async def get_users():
     return {"users": [...]}
 ```
+
+**Implémentation manuelle (TP5) :**
+```python
+# 1 requête toutes les 20 secondes par IP
+rate_limit_store = {}  # {"ip": datetime_derniere_requete}
+
+@app.middleware("http")
+async def rate_limiter(request: Request, call_next):
+    client_ip = request.client.host
+    now = datetime.now()
+    if client_ip in rate_limit_store:
+        elapsed = (now - rate_limit_store[client_ip]).total_seconds()
+        if elapsed < 20:
+            return JSONResponse(status_code=429,  # ← 429 Too Many Requests
+                content={"error": "Rate limit exceeded", "wait": f"{20-elapsed:.1f}s"})
+    rate_limit_store[client_ip] = now
+    return await call_next(request)
+```
+
+**Codes HTTP liés à la gateway :**
+- `401` — API Key manquante ou invalide
+- `403` — Accès interdit (bonne clé mais pas les droits)
+- `429` — Trop de requêtes (rate limit dépassé)
+- `502` — Le microservice backend ne répond pas
 
 ### 4. **Caching**
 Met en cache les réponses pour améliorer les performances.

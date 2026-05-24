@@ -628,6 +628,45 @@ def log_payment_failed(event):
 
 ---
 
+## � PATTERN OUTBOX (fiabilité de publication)
+
+**Problème :** Si on publie sur Kafka PUIS on sauvegarde en BDD, et que la BDD échoue → l'événement est parti mais la commande n'est pas enregistrée. **Double écriture non atomique.**
+
+**Solution — Pattern Outbox :**
+1. Sauvegarder en BDD ET écrire dans une table `outbox` dans la **même transaction**
+2. Un thread séparé lit la table `outbox` et publie sur Kafka
+3. Si Kafka est down → les events s'accumulent en BDD, publiés dès le retour
+
+```python
+# Dans le service (TP4 - orders-service)
+# Étape 1 : écrire commande + outbox dans une seule transaction
+new_order = Order(product_id=..., status="pending")
+db.add(new_order)
+
+outbox_event = OutboxEvent(
+    event_type="order.created",
+    payload=json.dumps({"order_id": new_order.id, ...})
+)
+db.add(outbox_event)
+db.commit()  # ← atomique : les deux ou aucun
+
+# Étape 2 : thread qui poll la table outbox toutes les 5s
+def process_outbox():
+    while True:
+        events = db.query(OutboxEvent).filter(OutboxEvent.processed == 0).all()
+        for event in events:
+            publish_event(event.event_type, json.loads(event.payload))
+            event.processed = 1
+            db.commit()
+        time.sleep(5)
+
+threading.Thread(target=process_outbox, daemon=True).start()
+```
+
+**Garantie :** au moins une publication (at-least-once delivery). Dans notre PokeDrafter, on n'a pas implémenté l'Outbox (publication directe), ce qui est une faiblesse.
+
+---
+
 ## 💡 CONCEPTS CLÉS À RETENIR
 
 1. **Kafka** = système de messagerie pour événements
@@ -637,6 +676,7 @@ def log_payment_failed(event):
 5. **Saga** = pattern pour transactions distribuées
 6. **Chorégraphie** = chaque service réagit aux événements
 7. **Compensation** = annuler en cas d'échec (libérer le stock)
+8. **Outbox** = pattern fiabilité — écriture BDD + Kafka atomique
 
 ---
 
