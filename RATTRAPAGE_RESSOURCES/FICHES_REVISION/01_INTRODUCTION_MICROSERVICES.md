@@ -6,6 +6,10 @@
 
 ## 🎯 QU'EST-CE QU'UN MICROSERVICE ?
 
+### Définition officielle — Martin Fowler
+> *"Le style architectural des microservices est une approche permettant de développer une application unique sous la forme d'une suite logicielle intégrant plusieurs services. Ces services sont construits autour des capacités de l'entreprise et peuvent être déployés de façon indépendante."*
+> — **Martin Fowler**
+
 ### Définition simple
 Un microservice est **un service indépendant** qui :
 - Fait **UNE seule chose** (principe de responsabilité unique)
@@ -255,6 +259,12 @@ spec:
 7. **Résilience** = un service peut tomber sans affecter les autres
 
 ---
+
+Image = Template figé (recette)
+Container = Instance qui tourne (plat cuisiné)
+Dockerfile = Instructions pour créer l'image
+Volume = Dossier persistant (données qui survivent)
+Docker Compose = Lancer plusieurs services ensemble
 
 ## ✅ AUTO-TEST
 

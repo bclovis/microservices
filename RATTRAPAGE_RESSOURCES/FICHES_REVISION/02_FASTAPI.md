@@ -34,7 +34,7 @@ app = FastAPI()
 @app.get("/")
 def read_root():
     return {"message": "Hello World"}
-```
+    
 
 **Lancer le serveur :**
 ```bash
@@ -348,6 +348,33 @@ async def add_process_time_header(request: Request, call_next):
 
 ---
 
+## ⏳ BACKGROUND TASKS (TÂCHES DE FOND)
+
+Lancer une tâche **après avoir renvoyé la réponse** — le client n'attend pas.
+
+```python
+from fastapi import BackgroundTasks
+
+def send_email(email: str, message: str):
+    # opération longue (ex: envoi mail)
+    print(f"Envoi mail à {email}: {message}")
+
+@app.post("/notify/{email}")
+async def notify(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(send_email, email, "Votre commande est confirmée")
+    return {"message": "Notification en cours..."}
+    # → répond immédiatement, envoie le mail en arrière-plan
+```
+
+**Cas d'usage :**
+- Envoyer un email après une inscription
+- Traiter un fichier volumineux (HTTP 202 Accepted)
+- Logger des événements sans ralentir la réponse
+
+**Différence avec Kafka :** BackgroundTask = dans le même service (intra-service). Kafka = communication entre services différents (inter-service).
+
+---
+
 ## 🎤 QUESTIONS PROBABLES À L'ORAL
 
 ### Q1 : Qu'est-ce que FastAPI ?
@@ -383,7 +410,26 @@ async def add_process_time_header(request: Request, call_next):
 7. **CORS** = nécessaire pour frontend → backend
 8. **Documentation auto** = /docs (Swagger UI)
 
+
+async def = Fonction asynchrone
+Signification : "Je suis une fonction qui peut libérer le CPU pendant les attentes"
+
+await = Attendre sans bloquer
+Signification : "J'attends, mais d'autres peuvent travailler pendant ce temps"
 ---
+
+Sans async = bloquant → Le serveur attend en ne faisant rien (1 client à la fois)
+Avec async = non-bloquant → Le serveur libère le CPU et traite d'autres clients
+Utilise async pour I/O → BDD, HTTP, Kafka, WebSocket (tout ce qui attend)
+
+
+ Utilise ASYNC pour :
+Opération	Pourquoi
+Requêtes BDD	Attente 10-50ms → libère le serveur
+Appels HTTP	Attente 100-500ms → libère le serveur
+Kafka	Attente messages → libère le serveur
+WebSocket	Attente messages → libère le serveur
+Lecture fichier	Attente disque → libère le serveur
 
 ## ✅ AUTO-TEST
 

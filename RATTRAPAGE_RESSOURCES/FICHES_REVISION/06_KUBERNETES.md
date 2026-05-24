@@ -443,6 +443,47 @@ kubectl rollout undo deployment/user-service
 
 ---
 
+## 🌐 INGRESS
+
+L'**Ingress** expose des services HTTP(S) à l'extérieur via un **nom de domaine unique**. C'est le reverse proxy de K8s.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-ingress
+spec:
+  rules:
+  - host: myapp.local
+    http:
+      paths:
+      - path: /users
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 80
+      - path: /orders
+        pathType: Prefix
+        backend:
+          service:
+            name: order-service
+            port:
+              number: 80
+```
+
+**Installation du contrôleur :**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.14.1/deploy/static/provider/cloud/deploy.yaml
+```
+
+**Différence Service vs Ingress :**
+- `Service` (NodePort/LoadBalancer) → un port par service, pas de routage URL
+- `Ingress` → un seul point d'entrée, routage par chemin (`/users`, `/orders`)
+
+---
+
 ## 💡 CONCEPTS CLÉS À RETENIR
 
 1. **Kubernetes** = orchestrateur de conteneurs
@@ -452,6 +493,7 @@ kubectl rollout undo deployment/user-service
 5. **Scaling** = augmenter/diminuer les replicas
 6. **HPA** = auto-scaling basé sur métriques
 7. **Rolling Update** = déploiement sans downtime
+8. **Ingress** = reverse proxy K8s, routage par nom de domaine
 
 ---
 
