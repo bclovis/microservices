@@ -1,0 +1,72 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/gateway.yaml
+# Déploiement de la Gateway Nginx + exposition externe
+# =============================================================================
+# RÔLE DU FICHIER :
+# Déploie Nginx comme point d'entrée de l'application et l'expose via NodePort.
+#
+# TYPES DE SERVICE KUBERNETES :
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ ClusterIP  : accessible uniquement à l'intérieur du cluster (défaut)    │
+# │ NodePort   : expose sur un port fixe sur CHAQUE nœud (port 30000-32767) │
+# │ LoadBalancer: crée un load balancer cloud (AWS ELB, GCP LB...)          │
+# │ Ingress    : routage HTTP/HTTPS au niveau L7 (alternative recommandée)  │
+# └─────────────────────────────────────────────────────────────────────────┘
+# On utilise NodePort pour dev avec Minikube (pas de cloud, pas d'Ingress Controller)
+# Accès : http://<IP_MINIKUBE>:30080
+# =============================================================================
+
+---
+# Deployment de la Gateway Nginx
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: pokedrafter
+spec:
+  replicas: 1            # 1 instance Nginx (en prod : 2+ pour HA)
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: pokedrafter/gateway:latest  # Image buildée avec "docker build" puis poussée dans registry
+          ports:
+            - containerPort: 80
+
+---
+# Service de la Gateway — NODEPORT pour accès externe
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: pokedrafter
+spec:
+  selector:
+    app: gateway
+  type: NodePort          # DIFFÉRENT des autres services ! (ClusterIP par défaut)
+                          # NodePort est nécessaire pour accéder depuis l'EXTÉRIEUR du cluster
+  ports:
+    - port: 80            # Port du Service dans le cluster
+      targetPort: 80      # Port du container Nginx
+      nodePort: 30080     # Port fixe ouvert sur chaque nœud Kubernetes
+                          # Accessible via : http://$(minikube ip):30080
+                          # En dev : minikube service gateway -n pokedrafter
+
+# =============================================================================
+# COMMENT ACCÉDER À L'APPLICATION EN DÉVELOPPEMENT ?
+# =============================================================================
+# 1. Démarrer Minikube : minikube start
+# 2. Appliquer tous les manifests : kubectl apply -f infra/k8s/
+# 3. Obtenir l'URL : minikube service gateway -n pokedrafter --url
+# 4. Ou manuellement : http://$(minikube ip):30080
+#
+# NOTE SUR LES IMAGES :
+# Les images doivent être buildées et disponibles dans le registry de Minikube
+# Commande : eval $(minikube docker-env) && docker build -t pokedrafter/gateway:latest .
+# eval $(minikube docker-env) = configure Docker pour utiliser le daemon Docker de Minikube

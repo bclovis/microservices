@@ -1,0 +1,255 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/services.yaml
+# Deployments et Services de tous les microservices FastAPI
+# =============================================================================
+# RÔLE DU FICHIER :
+# Déploie les 5 microservices Python (auth, team, battle, pokedex, chat)
+# dans le cluster Kubernetes.
+#
+# CHAQUE MICROSERVICE = UN DEPLOYMENT + UN SERVICE
+# - Deployment : gère les Pods (containers) et leur cycle de vie
+# - Service (ClusterIP) : DNS stable pour que les autres services se trouvent
+# =============================================================================
+
+---
+# ============================================================================
+# AUTH SERVICE — Authentification et gestion des tokens JWT
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: pokedrafter/auth-service:latest  # Image buildée depuis api/auth_service/
+          ports:
+            - containerPort: 8000                 # Uvicorn écoute toujours sur 8000 à l'intérieur
+          env:
+            # "postgres" = nom DNS du Service PostgreSQL dans ce namespace
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/auth_db
+          resources:                              # Limites de ressources (bonne pratique K8s)
+            requests:
+              memory: "128Mi"                     # Mémoire garantie
+              cpu: "100m"                         # 100 millicores = 0.1 CPU
+            limits:
+              memory: "256Mi"                     # Mémoire maximale (OOMKill si dépassé)
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service             # DNS : auth-service (dans namespace pokedrafter)
+  namespace: pokedrafter         # Nginx y accède via proxy_pass http://auth-service:8001
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 8001                 # Port du Service (mappé dans nginx.conf)
+      targetPort: 8000           # Port interne du container
+  # ClusterIP par défaut : pas d'accès externe direct, seulement via Nginx
+
+---
+# ============================================================================
+# TEAM SERVICE — Gestion des équipes Pokémon des joueurs
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: team-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: team-service
+  template:
+    metadata:
+      labels:
+        app: team-service
+    spec:
+      containers:
+        - name: team-service
+          image: pokedrafter/team-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/team_db
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: team-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: team-service
+  ports:
+    - port: 8002
+      targetPort: 8000
+
+---
+# ============================================================================
+# BATTLE SERVICE — Moteur de combat (NOTRE SERVICE PRINCIPAL)
+# ============================================================================
+# Ce service a besoin de Kafka ET PostgreSQL
+# Il publie les événements de combat sur le topic "battle-events"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: battle-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: battle-service
+  template:
+    metadata:
+      labels:
+        app: battle-service
+    spec:
+      containers:
+        - name: battle-service
+          image: pokedrafter/battle-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/battle_db
+            # "kafka" = DNS du Service Kafka dans le namespace pokedrafter
+            # Port 29092 = listener interne au cluster
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: battle-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: battle-service
+  ports:
+    - port: 8003
+      targetPort: 8000
+
+---
+# ============================================================================
+# POKEDEX SERVICE — Proxy PokeAPI avec cache Redis
+# ============================================================================
+# Ce service N'a PAS de base de données : utilise uniquement Redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pokedex-service
+  namespace: pokedrafter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pokedex-service
+  template:
+    metadata:
+      labels:
+        app: pokedex-service
+    spec:
+      containers:
+        - name: pokedex-service
+          image: pokedrafter/pokedex-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            # "redis" = DNS du Service Redis dans le namespace pokedrafter
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pokedex-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: pokedex-service
+  ports:
+    - port: 8004
+      targetPort: 8000
+
+---
+# ============================================================================
+# CHAT SERVICE — Chat temps réel WebSocket (NOTRE SERVICE PRINCIPAL)
+# ============================================================================
+# Ce service gère les connexions WebSocket persistantes
+# IMPORTANT : avec replicas > 1, chaque Pod a ses propres connexions WebSocket
+# Kafka synchronise les messages entre les Pods (pattern pub/sub)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: pokedrafter
+spec:
+  replicas: 1                     # En prod on pourrait mettre 2+ mais les WebSocket
+                                  # nécessitent sticky sessions ou un Redis pub/sub
+  selector:
+    matchLabels:
+      app: chat-service
+  template:
+    metadata:
+      labels:
+        app: chat-service
+    spec:
+      containers:
+        - name: chat-service
+          image: pokedrafter/chat-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://postgres:postgres@postgres:5432/chat_db
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092  # Consumer Kafka (lit "battle-events") + Producer ("chat-messages")
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+  namespace: pokedrafter
+spec:
+  selector:
+    app: chat-service
+  ports:
+    - port: 8005
+      targetPort: 8000
+
+# =============================================================================
+# RÉSUMÉ DES PORTS DANS K8S
+# =============================================================================
+# Service Port  | Container Port | Service Name    | Note
+# ------------- | -------------- | --------------- | ------
+# 8001          | 8000           | auth-service    | JWT auth
+# 8002          | 8000           | team-service    | Teams CRUD
+# 8003          | 8000           | battle-service  | Combat engine
+# 8004          | 8000           | pokedex-service | PokeAPI proxy
+# 8005          | 8000           | chat-service    | WebSocket
+#
+# Dans Docker Compose, chaque service écoute sur un port différent pour faciliter
+# le debugging depuis l'hôte. Dans K8s, chaque container est dans son Pod isolé
+# et peut écouter sur le même port interne (8000).

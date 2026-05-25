@@ -1,0 +1,133 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/kafka.yaml
+# Déploiement de Zookeeper et Kafka dans Kubernetes
+# =============================================================================
+# RÔLE DU FICHIER :
+# Déploie la pile de messaging Kafka en deux étapes :
+# 1. Zookeeper (coordinateur de cluster)
+# 2. Kafka (message broker)
+#
+# ARCHITECTURE :
+# Producers (battle, chat) → Kafka → Consumer (chat consumer loop)
+#
+# QUESTION PIÈGE ORAL : "Pourquoi Zookeeper ?"
+# → L'image confluent/cp-kafka:7.5.0 EXIGE KAFKA_ZOOKEEPER_CONNECT
+# → Sans Zookeeper, Kafka ne peut pas stocker ses métadonnées et crashe au démarrage
+# → KRaft (Kafka sans Zookeeper) n'est stable qu'à partir de Kafka 3.3
+# → On a choisi la version stable bien documentée (7.5.0 = Kafka ~3.5 en mode classique)
+# =============================================================================
+
+---
+# PARTIE 1 : Zookeeper Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: pokedrafter
+spec:
+  replicas: 1                  # 1 seule instance (suffisant pour dev)
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0
+          env:
+            # Port client Zookeeper : les clients (Kafka) se connectent sur ce port
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            # Tick = unité de temps Zookeeper (2000ms = 2s)
+            # Heartbeat et timeouts sont des multiples de TICK_TIME
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+          ports:
+            - containerPort: 2181
+
+---
+# PARTIE 2 : Zookeeper Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper              # DNS interne : zookeeper.pokedrafter.svc.cluster.local
+  namespace: pokedrafter       # Référencé comme "zookeeper:2181" par Kafka
+spec:
+  selector:
+    app: zookeeper
+  ports:
+    - port: 2181
+      targetPort: 2181
+
+---
+# PARTIE 3 : Kafka Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: pokedrafter
+spec:
+  replicas: 1                  # 1 broker Kafka (dev). En prod : 3+ brokers pour HA
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"       # ID unique dans le cluster (en prod : 1, 2, 3 pour 3 brokers)
+            
+            # VARIABLE CRITIQUE : adresse de Zookeeper
+            # "zookeeper" = résolution DNS K8s vers le Service Zookeeper ci-dessus
+            # ":2181" = port du Service Zookeeper
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper:2181"
+            
+            # PLAINTEXT://kafka:29092 = listener pour les AUTRES PODS du cluster
+            # Port 29092 est la convention Confluent pour les communications inter-broker/pod
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:29092"
+            
+            # 1 seule réplique car 1 seul broker (en prod : 3 pour tolérance aux pannes)
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            
+            # Crée automatiquement les topics "battle-events" et "chat-messages"
+            # quand les producers écrivent pour la première fois
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          ports:
+            - containerPort: 29092
+
+---
+# PARTIE 4 : Kafka Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka                  # DNS : kafka.pokedrafter.svc.cluster.local → simplifié "kafka"
+  namespace: pokedrafter
+spec:
+  selector:
+    app: kafka
+  ports:
+    - port: 29092              # Port exposé par le Service
+      targetPort: 29092        # Port du container Kafka
+  # ClusterIP (pas de NodePort) : Kafka n'est accessible qu'à l'intérieur du cluster
+
+# =============================================================================
+# FLOW DU MESSAGING DANS CE DÉPLOIEMENT K8S :
+# =============================================================================
+# 1. battle-service publie sur topic "battle-events"
+#    → KAFKA_BOOTSTRAP_SERVERS=kafka:29092 → résolution DNS → Pod Kafka
+# 2. Kafka stocke le message dans le topic
+# 3. chat-service (consumer loop dans main.py) est abonné à "battle-events"
+#    → reçoit le message → broadcast aux WebSocket clients

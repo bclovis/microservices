@@ -1,0 +1,200 @@
+# =============================================================================
+# INFRASTRUCTURE — docker/docker-compose.yml
+# Orchestration locale de tous les services de PokeDrafter
+# =============================================================================
+# RÔLE DU FICHIER :
+# Lance les 10 services en une seule commande : docker compose up
+# Définit les dépendances, la configuration réseau, les volumes et les variables d'env.
+#
+# SERVICES :
+# ┌─────────────────────────────────────────────────────────────┐
+# │  Infrastructure :  postgres  redis  zookeeper  kafka         │
+# │  Microservices :   auth     team    battle  pokedex  chat    │
+# │  Entrée :          gateway (Nginx)                           │
+# └─────────────────────────────────────────────────────────────┘
+# =============================================================================
+
+version: '3.8'   # Version du format docker-compose (3.8 = stable, supporte la plupart des features)
+
+services:
+
+  # ============================================================================
+  # POSTGRESQL — Base de données relationnelle
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine      # PostgreSQL 16 sur Alpine (image légère)
+    environment:
+      POSTGRES_USER: postgres      # Super-utilisateur de la base
+      POSTGRES_PASSWORD: postgres  # Mot de passe (dev uniquement ! Ne jamais utiliser en prod)
+      POSTGRES_DB: pokedrafter     # Base par défaut créée au démarrage
+    ports:
+      - "5432:5432"                # Expose le port pour accès depuis l'hôte (psql, DBeaver...)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persistance des données entre redémarrages
+      # init-db.sql est exécuté AUTOMATIQUEMENT au premier démarrage
+      # Il crée les 4 bases : auth_db, team_db, battle_db, chat_db
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: always                # Redémarre automatiquement si le container plante
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]  # Vérifie que PostgreSQL est prêt
+      interval: 5s                 # Vérifie toutes les 5 secondes
+      timeout: 5s                  # Timeout de 5 secondes
+      retries: 5                   # 5 tentatives avant de déclarer le service "unhealthy"
+
+  # ============================================================================
+  # REDIS — Cache en mémoire
+  # ============================================================================
+  redis:
+    image: redis:7-alpine          # Redis 7 sur Alpine
+    ports:
+      - "6379:6379"                # Port standard Redis
+    volumes:
+      - redis_data:/data           # Persistance du cache (optionnel, le cache peut être perdu)
+    restart: always
+
+  # ============================================================================
+  # ZOOKEEPER — Coordinateur de cluster Kafka
+  # ============================================================================
+  # POURQUOI ZOOKEEPER ?
+  # Kafka utilise Zookeeper pour gérer :
+  # - L'état du cluster (quel broker est leader ?)
+  # - La liste des topics et leurs métadonnées
+  # - Les offsets des consumers
+  # L'image confluentinc/cp-kafka:7.5.0 EXIGE Zookeeper (mode classique)
+  # KAFKA_ZOOKEEPER_CONNECT est une variable OBLIGATOIRE pour cette image
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0  # Image Confluent (Confluent = éditeur de Kafka)
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181  # Port d'écoute de Zookeeper (standard)
+      ZOOKEEPER_TICK_TIME: 2000    # Unité de temps de Zookeeper en ms (heartbeat, timeouts)
+
+  # ============================================================================
+  # KAFKA — Message Broker
+  # ============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper                  # Kafka doit démarrer APRÈS Zookeeper
+    ports:
+      - "9092:9092"                # Expose pour connexions depuis l'hôte (debug)
+    environment:
+      KAFKA_BROKER_ID: 1           # Identifiant unique du broker (en prod, chaque broker a son ID)
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181  # Adresse Zookeeper dans le réseau Docker
+      
+      # DEUX "LISTENERS" (points d'écoute) :
+      # PLAINTEXT://kafka:29092 → pour les containers Docker entre eux (réseau interne)
+      # PLAINTEXT_HOST://localhost:9092 → pour les connexions depuis la machine hôte
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      
+      # En dev avec 1 seul broker, le topic __consumer_offsets n'a qu'1 réplique
+      # En prod, on aurait 3+ brokers et replication_factor: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      
+      # Crée automatiquement les topics qui n'existent pas quand un producer écrit
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  # ============================================================================
+  # AUTH SERVICE — Authentification et JWT
+  # ============================================================================
+  auth_service:
+    build: ../../api/auth_service  # Construit l'image depuis le Dockerfile de auth_service
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/auth_db
+      # "postgres" dans l'URL = nom du service Docker Compose (résolution DNS interne)
+    depends_on:
+      - postgres
+    restart: always
+
+  # ============================================================================
+  # TEAM SERVICE — Gestion des équipes Pokémon
+  # ============================================================================
+  team_service:
+    build: ../../api/team_service
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/team_db
+    depends_on:
+      - postgres
+    restart: always
+
+  # ============================================================================
+  # BATTLE SERVICE — Moteur de combat
+  # ============================================================================
+  # Ce service a besoin à la fois de PostgreSQL ET de Kafka
+  battle_service:
+    build: ../../api/battle_service
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/battle_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092  # Port INTERNE (29092, pas 9092 !)
+    depends_on:
+      - postgres
+      - kafka                      # Battle service publie sur Kafka → doit démarrer après
+    restart: always
+
+  # ============================================================================
+  # POKEDEX SERVICE — Données Pokémon (proxy PokeAPI + cache Redis)
+  # ============================================================================
+  pokedex_service:
+    build: ../../api/pokedex_service
+    ports:
+      - "8004:8004"
+    environment:
+      REDIS_URL: redis://redis:6379/0  # Connexion au container Redis
+    depends_on:
+      - redis                      # Pas besoin de PostgreSQL (pas de BDD propre)
+    restart: always
+
+  # ============================================================================
+  # CHAT SERVICE — Chat temps réel WebSocket + Kafka
+  # ============================================================================
+  chat_service:
+    build: ../../api/chat_service
+    ports:
+      - "8005:8005"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/chat_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092  # Consumer ET Producer Kafka
+    depends_on:
+      - kafka
+      - postgres
+    restart: always
+
+  # ============================================================================
+  # GATEWAY — Nginx reverse proxy (point d'entrée unique)
+  # ============================================================================
+  gateway:
+    build: ../../api/gateway
+    ports:
+      - "80:80"                    # Port accessible depuis l'extérieur
+    depends_on:                    # Doit démarrer après TOUS les services
+      - auth_service
+      - team_service
+      - battle_service
+      - pokedex_service
+      - chat_service
+    restart: always
+
+
+# =============================================================================
+# VOLUMES NOMMÉS — Persistance des données
+# =============================================================================
+# Sans volumes, les données disparaissent quand un container s'arrête
+# Les volumes Docker sont des dossiers gérés par Docker (pas sur le filesystem hôte directement)
+volumes:
+  postgres_data:   # Données PostgreSQL (tables, index, données)
+  redis_data:      # Cache Redis (peut être vidé sans perte critique)
+
+# =============================================================================
+# CONCEPT : depends_on ne garantit PAS que le service est PRÊT
+# =============================================================================
+# depends_on contrôle uniquement l'ORDRE DE DÉMARRAGE des containers
+# Kafka prend ~10-30 secondes à être pleinement opérationnel après démarrage
+# Les services qui en dépendent peuvent planter si Kafka n'est pas encore prêt
+# Solution : les services ont une logique de retry intégrée (aiokafka gère les retries)
+# En production : utiliser wait-for-it.sh ou healthcheck conditions

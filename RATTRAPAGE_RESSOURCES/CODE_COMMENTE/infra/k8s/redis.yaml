@@ -1,0 +1,71 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/redis.yaml
+# Déploiement de Redis (cache en mémoire) dans Kubernetes
+# =============================================================================
+# RÔLE : Redis est utilisé par le Pokédex Service comme cache des réponses PokeAPI.
+# Évite d'appeler PokeAPI à chaque requête (API externe = lente + limitée en débit).
+# =============================================================================
+
+---
+# PARTIE 1 : PersistentVolumeClaim pour Redis
+# Redis peut persister ses données sur disque (mode RDB/AOF)
+# En dev, le cache peut être volatile, mais un PVC garantit de ne pas recharger
+# tout le cache après chaque redémarrage du Pod
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: pokedrafter
+spec:
+  accessModes:
+    - ReadWriteOnce      # Un seul nœud peut écrire (suffisant pour 1 Pod Redis)
+  resources:
+    requests:
+      storage: 512Mi     # 512 Mo suffisant pour un cache de données Pokémon (~1000 items)
+
+---
+# PARTIE 2 : Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: pokedrafter
+spec:
+  replicas: 1            # 1 seule instance Redis (mode standalone)
+                         # En prod haute disponibilité : Redis Cluster ou Redis Sentinel (3 nodes)
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine  # Redis 7 sur Alpine (image légère ~30Mo)
+          ports:
+            - containerPort: 6379  # Port standard Redis
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data     # Redis stocke ses fichiers RDB/AOF dans /data
+      volumes:
+        - name: redis-storage
+          persistentVolumeClaim:
+            claimName: redis-pvc  # Lie au PVC créé ci-dessus
+
+---
+# PARTIE 3 : Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis              # DNS interne : redis (dans le namespace pokedrafter)
+  namespace: pokedrafter   # Les autres pods y accèdent via redis://redis:6379
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  # ClusterIP (défaut) : Redis uniquement accessible à l'intérieur du cluster
+  # On N'expose PAS Redis en NodePort pour des raisons de sécurité

@@ -1,0 +1,90 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/postgres.yaml
+# Déploiement de PostgreSQL dans le cluster Kubernetes
+# =============================================================================
+# RÔLE DU FICHIER :
+# Déploie PostgreSQL avec persistance des données via un PersistentVolumeClaim.
+#
+# DIFFÉRENCE DOCKER COMPOSE vs KUBERNETES :
+# Docker Compose : "volumes: postgres_data:/var/lib/postgresql/data"
+# Kubernetes : PersistentVolumeClaim (PVC) → PersistentVolume (PV) → stockage physique
+# Kubernetes sépare la demande de stockage (PVC) de la fourniture (PV), 
+# permettant différents backends (NFS, cloud, hostPath...)
+# =============================================================================
+
+---
+# PARTIE 1 : PersistentVolumeClaim — Demande de stockage persistant
+apiVersion: v1
+kind: PersistentVolumeClaim    # Demande de stockage (le PV est fourni par le cluster)
+metadata:
+  name: postgres-pvc           # Nom du PVC, référencé par le Deployment
+  namespace: pokedrafter       # Dans notre namespace isolé
+spec:
+  accessModes:
+    - ReadWriteOnce            # RWO = peut être monté en lecture/écriture par UN SEUL nœud à la fois
+                               # (suffisant pour une base de données qui a 1 seul Pod)
+  resources:
+    requests:
+      storage: 1Gi             # Demande 1 GiB de stockage persistant
+
+---
+# PARTIE 2 : Deployment — Lance le container PostgreSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres               # Nom du Deployment
+  namespace: pokedrafter
+spec:
+  replicas: 1                  # PostgreSQL = 1 seule instance (pas de réplication built-in)
+                               # En prod on utiliserait Patroni ou un opérateur pour la HA
+  selector:
+    matchLabels:
+      app: postgres            # Sélectionne les Pods avec ce label
+  template:
+    metadata:
+      labels:
+        app: postgres          # Label appliqué aux Pods créés par ce Deployment
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres  # En prod : utiliser un Secret K8s (kubectl create secret)
+            - name: POSTGRES_MULTIPLE_DATABASES
+              value: "auth_db,team_db,battle_db"  # Crée plusieurs bases via un script init
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data  # Chemin interne des données PostgreSQL
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc  # Lie ce volume au PVC créé ci-dessus
+
+---
+# PARTIE 3 : Service — Expose PostgreSQL aux autres Pods du namespace
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres               # Nom DNS interne : postgres.pokedrafter.svc.cluster.local
+  namespace: pokedrafter       # Simplifié en "postgres" dans le même namespace
+spec:
+  selector:
+    app: postgres              # Route le trafic vers les Pods avec label app=postgres
+  ports:
+    - port: 5432               # Port exposé par le Service
+      targetPort: 5432         # Port du container cible
+  # ClusterIP (par défaut) : accessible uniquement à l'intérieur du cluster
+  # Parfait pour les bases de données qui ne doivent pas être exposées à l'extérieur
+
+# =============================================================================
+# CONCEPT : POURQUOI UN SERVICE EN PLUS DU DEPLOYMENT ?
+# =============================================================================
+# Un Deployment crée des Pods, qui ont des IPs ÉPHÉMÈRES (changent si le Pod redémarre)
+# Un Service crée une IP STABLE et un nom DNS stable (postgres) qui pointe toujours
+# vers les Pods du Deployment, même si ces Pods sont recréés avec de nouvelles IPs.
+# Sans Service, les autres microservices ne pourraient pas trouver PostgreSQL !

@@ -1,0 +1,30 @@
+# =============================================================================
+# POKEDEX SERVICE — requirements.txt
+# Dépendances Python du service Pokédex
+# =============================================================================
+# RÔLE : Ce service est le plus léger en dépendances.
+# Pas de Kafka, pas de SQLAlchemy/asyncpg — juste FastAPI + Redis + HTTP client.
+# =============================================================================
+
+# FastAPI : framework web Python asynchrone
+fastapi==0.111.0
+
+# Uvicorn : serveur ASGI
+uvicorn[standard]==0.30.0
+
+# Pydantic : validation des données
+pydantic==2.7.0
+
+# pydantic-settings : lecture des variables d'environnement
+pydantic-settings==2.3.0
+
+# python-dotenv : lecture du fichier .env
+python-dotenv==1.0.1
+
+# httpx : client HTTP asynchrone pour appeler l'API externe PokeAPI
+# Utilisé dans pokeapi_service.py pour tous les appels à https://pokeapi.co
+httpx==0.27.0
+
+# redis : client Redis asynchrone pour le cache
+# redis.asyncio = sous-module asynchrone (compatible asyncio/fastapi)
+redis==5.0.0

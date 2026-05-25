@@ -1,0 +1,38 @@
+# =============================================================================
+# CHAT SERVICE — requirements.txt
+# Dépendances Python du service de chat
+# =============================================================================
+# RÔLE : Liste toutes les bibliothèques Python nécessaires au Chat Service.
+# "pip install -r requirements.txt" installe tout d'un coup.
+# Les versions sont ÉPINGLÉES (==) pour garantir la reproductibilité :
+# le même code, les mêmes versions = comportement identique partout.
+# =============================================================================
+
+# FastAPI : framework web Python asynchrone (routes HTTP, WebSocket, validation)
+fastapi==0.111.0
+
+# Uvicorn : serveur ASGI (Asynchronous Server Gateway Interface) qui lance FastAPI
+# [standard] : inclut uvloop (boucle event plus rapide) et httptools
+uvicorn[standard]==0.30.0
+
+# Pydantic : validation et sérialisation des données (modèles schema, config)
+pydantic==2.7.0
+
+# pydantic-settings : extension pour lire les variables d'environnement et .env
+pydantic-settings==2.3.0
+
+# python-dotenv : charge automatiquement le fichier .env en variables d'environnement
+python-dotenv==1.0.1
+
+# aiokafka : client Kafka asynchrone compatible asyncio
+# Utilisé pour : consumer (écouter battle-events) + producer (publier chat-messages)
+aiokafka==0.10.0
+
+# websockets : bibliothèque WebSocket bas niveau (utilisée par uvicorn/starlette)
+websockets==12.0
+
+# SQLAlchemy avec support asyncio : ORM pour interagir avec PostgreSQL de façon async
+sqlalchemy[asyncio]==2.0.31
+
+# asyncpg : driver PostgreSQL asynchrone natif (requis par SQLAlchemy pour le mode async)
+asyncpg==0.29.0

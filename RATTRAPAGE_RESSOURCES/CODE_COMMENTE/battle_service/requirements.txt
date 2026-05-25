@@ -1,0 +1,43 @@
+# =============================================================================
+# BATTLE SERVICE — requirements.txt
+# Dépendances Python du service de combat
+# =============================================================================
+# RÔLE : Liste toutes les bibliothèques Python nécessaires au Battle Service.
+# =============================================================================
+
+# FastAPI : framework web Python asynchrone (routes HTTP, WebSocket, validation)
+fastapi==0.111.0
+
+# Uvicorn : serveur ASGI qui lance FastAPI
+# [standard] inclut uvloop (loop async plus rapide) et httptools
+uvicorn[standard]==0.30.0
+
+# Pydantic : validation et sérialisation des données (schémas de requête/réponse)
+pydantic==2.7.0
+
+# pydantic-settings : lecture des variables d'environnement et fichiers .env
+pydantic-settings==2.3.0
+
+# python-dotenv : charge le fichier .env en variables d'environnement
+python-dotenv==1.0.1
+
+# SQLAlchemy avec asyncio : ORM pour PostgreSQL en mode asynchrone
+sqlalchemy[asyncio]==2.0.31
+
+# asyncpg : driver PostgreSQL asynchrone natif (le plus rapide pour Python async)
+asyncpg==0.29.0
+
+# aiokafka : client Kafka asynchrone
+# Utilisé par kafka_service.py pour publier les événements de combat
+# sur le topic "battle-events"
+aiokafka==0.10.0
+
+# python-jose[cryptography] : création et validation des JWT (JSON Web Tokens)
+# Utilisé pour décoder le token d'auth dans les headers des requêtes
+# [cryptography] = backend cryptographique pour RS256/HS256
+python-jose[cryptography]==3.3.0
+
+# httpx : client HTTP asynchrone
+# Utilisé pour appeler le Pokédex Service (GET /api/pokedex/{pokemon_id})
+# et récupérer les données des Pokémon engagés dans un combat
+httpx==0.27.0

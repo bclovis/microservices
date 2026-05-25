@@ -1,0 +1,20 @@
+# =============================================================================
+# KUBERNETES — infra/k8s/namespace.yaml
+# Création du namespace "pokedrafter"
+# =============================================================================
+# RÔLE DU FICHIER :
+# Un namespace Kubernetes est un espace de noms logique qui isole les ressources.
+# Tous les objets K8s du projet sont créés DANS ce namespace.
+#
+# POURQUOI UN NAMESPACE ?
+# Sans namespace, toutes les ressources vont dans "default".
+# Avec un namespace "pokedrafter" :
+# - Isolation : les ressources de ce projet sont séparées des autres projets du cluster
+# - Facilite le nettoyage : "kubectl delete namespace pokedrafter" supprime TOUT
+# - Meilleure organisation des ressources et des droits (RBAC)
+# =============================================================================
+
+apiVersion: v1            # Version de l'API Kubernetes pour cet objet
+kind: Namespace           # Type d'objet : un namespace (espace de noms logique)
+metadata:
+  name: pokedrafter       # Nom du namespace — toutes les commandes kubectl utiliseront -n pokedrafter
