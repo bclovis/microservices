@@ -29,13 +29,18 @@ Le script ne calcule pas les règles — elles sont déjà calculées et stocké
 | Colonne | Type | Description |
 |---|---|---|
 | `source` | string | Source de l'événement (ex: `ouigos3dfr_crm`) |
-| `source_detail` | string | Détail (ex: `actionable_export_booking`) |
+| `source_detail` | string | Détail de la source (ex: `actionable_export_booking`) |
+| `source_type` | string | Type de source (ex: `iceberg`) |
+| `rule_category` | string | Catégorie de la règle (ex: `data_quality`) |
 | `rule` | string | Nom de la règle (ex: `nbr_hard_error_variation`) |
-| `process_date` | timestamp | Date de traitement de la donnée |
+| `process_date` | timestamp | Date de traitement de la donnée source |
+| `metric_name` | string | Nom de la métrique (ex: `delta_error`) |
 | `metric_value` | double | Valeur observée |
 | `threshold_value` | double | Valeur de seuil |
 | `status` | string | `OK` / `ALERTE` / `CRITIQUE` |
 | `message` | string | Explication si statut != OK |
+| `event_creation_date` | timestamp | Date d'insertion de l'événement |
+| `event_modification_date` | timestamp | Date de dernière mise à jour de l'événement |
 
 ---
 
@@ -53,7 +58,9 @@ Le script ne calcule pas les règles — elles sont déjà calculées et stocké
 ### Exemple de SQL généré
 
 ```sql
-SELECT source, source_detail, process_date, rule, status, message
+SELECT source, source_detail, source_type, rule_category, rule,
+       process_date, metric_name, metric_value, threshold_value,
+       status, message, event_creation_date, event_modification_date
 FROM interne_data.monitoring_events
 WHERE process_date >= now() - interval 24 hours
   AND status IN ('ALERTE', 'CRITIQUE')
