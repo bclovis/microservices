@@ -1,206 +1,179 @@
-KMN-93 — Généralisation du monitoring
-Explication complète de la solution
-02/06/2026
+# Generic Monitoring — KMN-93
 
+Script de surveillance et d'alerting générique basé sur la table d'événements `interne_data.monitoring_events`.
 
-LE PROBLEME DE DEPART
----------------------
+---
 
-On avait déjà un script (KMN-61) qui surveillait la fraîcheur de tables Iceberg chez Ouigo.
-Son principe : pour chaque table configurée, il fait un MAX() sur une colonne de date, compare
-à l'heure actuelle, et envoie un mail d'alerte si le retard dépasse un seuil en minutes.
+## Contexte
 
-Ce script fonctionne bien, mais il est limité : il ne sait faire que ce contrôle-là.
-Si demain on veut surveiller un taux d'erreurs ou un nombre d'anomalies, il faut modifier
-le code Python. Ce n'est pas maintenable sur le long terme.
+Le script [KMN-61](https://jira-cyllene.atlassian.net/browse/KMN-61) surveille la fraîcheur de tables Iceberg : il fait un `MAX()` sur une colonne de date et envoie un mail si le retard dépasse un seuil. Il ne sait faire que ça.
 
-Le besoin exprimé dans KMN-93 : généraliser ce système pour pouvoir surveiller
-n'importe quelle métrique, sans toucher au code à chaque nouveau cas d'usage.
+**KMN-93** généralise la surveillance : d'autres process du datalake calculent déjà des règles métier (taux d'erreurs, anomalies, volumétrie…) et écrivent leurs résultats dans une table centrale `interne_data.monitoring_events`. Ce script lit cette table et notifie les bonnes équipes selon des abonnements configurables.
 
+---
 
-COMMENT ON A TROUVE LA SOLUTION
---------------------------------
+## Architecture
 
-En discutant avec Christophe et Sofiane, deux cas d'usage concrets ont émergé :
-1. Surveiller le taux d'erreurs dures dans le profiling Ouigo (nbr_hard_error / nbr_rows)
-2. Détecter une croissance anormale du nombre d'anomalies d'un jour à l'autre
+```
+Process métier A  ──┐
+Process métier B  ──┼──► interne_data.monitoring_events ◄── GenericMonitoring ──► Mails
+Process métier C  ──┘
+```
 
-En analysant ces deux cas, on remarque qu'ils ont tous les deux la même structure :
-- une requête SQL qui retourne une valeur
-- une comparaison de cette valeur à un seuil
-- une alerte si ça dépasse
+Le script ne calcule pas les règles — elles sont déjà calculées et stockées. Il fait **lire → filtrer → notifier**.
 
-La première idée était donc de coder ces règles en Python, avec un dispatcher
-qui lit un "ruleType" dans la config et appelle la bonne fonction.
+---
 
-Mais Christophe a précisé quelque chose de plus important dans le ticket :
-il existe déjà une table centrale qui centralise tous ces résultats de contrôle,
-créée par d'autres équipes : interne_data.monitoring_events.
+## Structure de la table `monitoring_events`
 
-Cette table reçoit déjà les résultats de règles qui tournent dans le datalake.
-Chaque ligne représente un événement avec un statut : OK, ALERTE ou CRITIQUE.
+| Colonne | Type | Description |
+|---|---|---|
+| `source` | string | Source de l'événement (ex: `ouigos3dfr_crm`) |
+| `source_detail` | string | Détail (ex: `actionable_export_booking`) |
+| `rule` | string | Nom de la règle (ex: `nbr_hard_error_variation`) |
+| `process_date` | timestamp | Date de traitement de la donnée |
+| `metric_value` | double | Valeur observée |
+| `threshold_value` | double | Valeur de seuil |
+| `status` | string | `OK` / `ALERTE` / `CRITIQUE` |
+| `message` | string | Explication si statut != OK |
 
-Du coup, notre rôle n'est pas de recalculer les règles — c'est déjà fait ailleurs.
-Notre rôle est de lire cette table et d'envoyer les bonnes alertes aux bonnes personnes.
+---
 
-C'est le pattern "pub/sub" (publication / abonnement) :
-  - les process métier publient des événements dans la table
-  - notre script lit la table et notifie les abonnés selon leurs filtres
+## Fonctionnement
 
+À chaque exécution, pour chaque abonnement actif :
 
-LA STRUCTURE DE LA TABLE monitoring_events
--------------------------------------------
+1. Connexion Impala via DSN ODBC
+2. Construction du SQL selon les filtres de l'abonnement
+3. Exécution sur `monitoring_events`
+4. Si des lignes remontent → mail HTML avec tableau des événements
+5. Si aucune ligne → rien (log info)
+6. Si erreur technique → mail d'erreur à l'équipe tech
 
-Voici ce que contient chaque ligne de la table :
+### Exemple de SQL généré
 
-  source                : d'où vient l'événement (ex: ouigos3dfr_crm)
-  source_detail         : détail (ex: actionable_export_booking)
-  source_type           : type de source (iceberg, batch, ...)
-  rule_category         : catégorie de la règle (data_quality, anomaly_detection, ...)
-  rule                  : nom de la règle (ex: nbr_hard_error_variation)
-  process_date          : date à laquelle la donnée a été traitée
-  metric_name           : nom de la mesure (ex: delta_error)
-  metric_value          : valeur observée (ex: 0.0)
-  threshold_value       : valeur de seuil (ex: 5.0)
-  status                : OK / ALERTE / CRITIQUE
-  message               : explication si pas OK
-  event_creation_date   : quand l'événement a été créé
-  event_modification_date : quand il a été mis à jour
-
-On a accès aux vraies données via Zeppelin. Sur les données qu'on a vues,
-tout est à "OK" — les règles existantes n'ont pas détecté d'anomalie.
-
-
-CE QUE FAIT LE SCRIPT GenericMonitoring
------------------------------------------
-
-Le script tourne périodiquement (via Airflow en prod).
-A chaque exécution, il :
-
-1. Lit le fichier config.json
-2. Pour chaque abonnement actif :
-   a. Ouvre une connexion Impala (DSN ODBC Windows)
-   b. Construit un SQL dynamiquement selon les filtres de l'abonnement
-   c. Exécute le SQL sur interne_data.monitoring_events
-   d. Si des lignes remontent → envoie un mail HTML avec un tableau
-   e. Si aucune ligne → rien, on logue juste "no events"
-3. Si une erreur technique arrive (connexion échoue, etc.) → mail d'erreur à l'équipe tech
-
-Le SQL est construit par la fonction build_query() dans main.py.
-Elle assemble les conditions WHERE à partir des filtres configurés :
-  - deltaHours → process_date >= now() - interval X hours
-  - criticality → status IN ('ALERTE', 'CRITIQUE') ou status = 'CRITIQUE'
-  - source → source = 'ouigos3dfr_global'
-
-Exemple de SQL généré pour l'abonnement Cyllene :
-  SELECT source, source_detail, process_date, rule, status, message
-  FROM interne_data.monitoring_events
-  WHERE process_date >= now() - interval 24 hours
+```sql
+SELECT source, source_detail, process_date, rule, status, message
+FROM interne_data.monitoring_events
+WHERE process_date >= now() - interval 24 hours
   AND status IN ('ALERTE', 'CRITIQUE')
-  ORDER BY status DESC, source, process_date DESC
+ORDER BY status DESC, source, process_date DESC
+```
 
+---
 
-POURQUOI UN FICHIER DE CONFIG
--------------------------------
+## Configuration
 
-Le fichier config.json contient tout ce qui peut changer sans modifier le code :
-  - les connexions BDD et SMTP
-  - la liste des abonnements avec leurs filtres et destinataires
+Tout est dans [`src/config/config.json`](src/config/config.json) — aucun code à modifier pour ajouter un abonnement.
 
-Ajouter un nouvel abonnement (ex: une nouvelle équipe cliente) = copier-coller
-un bloc JSON dans config.json. Le code Python ne change pas.
+### Abonnements configurés
 
-Si demain Ouigo veut recevoir uniquement les CRITIQUE en temps réel (deltaHours: 1),
-on ajoute un abonnement, on ne touche pas au code.
+| Nom | Source | Criticité | Fenêtre | Destinataires |
+|---|---|---|---|---|
+| `alerte_global_cyllene` | toutes | ALERTE + CRITIQUE | 24h | cyllene-data-exploitation@ |
+| `alerte_ouigos3dfr_global` | `ouigos3dfr_global` | ALERTE + CRITIQUE | 24h | OuigoS3DataFR-exploitation@ |
 
+### Ajouter un abonnement
 
-LES ABONNEMENTS CONFIGURÉS
-----------------------------
+Ajouter un bloc dans la section `subscriptions` de `config.json` :
 
-Abonnement 1 — alerte_global_cyllene
-  Filtre : toutes sources, statut ALERTE ou CRITIQUE, dernières 24h
-  Destinataire : cyllene-data-exploitation@groupe-cyllene.com
-  Usage : vision globale du datalake pour l'équipe exploitation Cyllene
-
-Abonnement 2 — alerte_ouigos3dfr_global
-  Filtre : source = ouigos3dfr_global, statut ALERTE ou CRITIQUE, dernières 24h
-  Destinataire : OuigoS3DataFR-exploitation@groupe-cyllene.com
-  Usage : alertes spécifiques Ouigo pour leur propre équipe d'exploitation
-
-Les deux peuvent coexister et envoyer des mails indépendamment.
-Si un événement Ouigo est en ALERTE, les deux abonnements le reçoivent
-(l'un parce qu'il voit tout, l'autre parce qu'il filtre sur Ouigo).
-
-
-MULTI-CONNEXIONS
------------------
-
-Christophe a mentionné qu'il pourrait y avoir d'autres clients avec d'autres BDD.
-Chaque abonnement a son propre champ "connexionName" qui pointe sur une entrée
-dans la section "connection" du config.
-
-Si demain il y a un client B sur un autre cluster Impala :
-  - on ajoute une connexion dans "connection" avec un nouveau DSN
-  - on ajoute un abonnement avec "connexionName": "impala_client_b"
-  - le script ouvre la connexion à la demande et la réutilise pour les abonnements
-    qui pointent sur le même DSN (pool de connexions, pas une ouverture par abonnement)
-
-
-SURVEILLANCE DE LA TABLE monitoring_events ELLE-MEME
-------------------------------------------------------
-
-Le ticket demandait aussi de surveiller que la table monitoring_events soit bien
-alimentée régulièrement. Si plus personne n'écrit dans cette table, c'est signe
-que quelque chose a planté en amont.
-
-Pour ça, on s'est appuyé sur le script KMN-61 existant (iceberg-monitoring).
-On a simplement ajouté une tâche dans son config.json :
-
-  {
-    "name": "monitor_monitoring_eve_freshness",
-    "flux": {
-      "sourceTable": "interne_data.monitoring_events",
-      "dateColumn": "process_date",
-      "threshold_minutes": 1
-    }
+```json
+{
+  "name": "alerte_nouveau_client",
+  "isActive": true,
+  "connexionName": "impala_ouigos3dfr",
+  "filters": {
+    "source": "nouveau_client",
+    "criticality": "alerte+critique",
+    "deltaHours": 24
+  },
+  "email": {
+    "connexionName": "ldm_smtp",
+    "subject": "[ALERTE] Monitoring nouveau client",
+    "from": "LDM-IT-Exploitation@leadeal-marketing.com",
+    "to": ["equipe@groupe-cyllene.com"],
+    "cc": []
   }
+}
+```
 
-Même logique que les autres tables : MAX(process_date) vs maintenant.
-Si la table n'est plus alimentée depuis trop longtemps → mail d'alerte.
-On réutilise l'infrastructure existante sans dupliquer de code.
+Valeurs possibles pour `criticality` : `tous` / `alerte+critique` / `critique`
 
-Note : pour l'instant ce check échoue avec une erreur de droits (User 'bclovis'
-does not have privileges). Les droits SELECT sur interne_data.monitoring_events
-doivent être accordés au compte de service utilisé en prod.
+### Ajouter une connexion BDD
 
+```json
+{
+  "name": "impala_nouveau_client",
+  "protocol": "odbc",
+  "dsn": "nouveau_client_preprod_impala"
+}
+```
 
-STRUCTURE DES FICHIERS
------------------------
+Puis référencer ce nom dans `connexionName` de l'abonnement.
 
+---
+
+## Structure des fichiers
+
+```
 GenericMonitoring/
-  src/
-    main.py               → orchestrateur principal
-    config/
-      config.json         → abonnements, connexions, destinataires
-    mail/
-      smtp_mailer.py      → envoi de mails HTML ou texte via SMTP
-    utils/
-      monitor_utils.py    → connexion Impala, logging, mail d'erreur
+├── README.md
+└── src/
+    ├── main.py                  ← orchestrateur principal
+    ├── config/
+    │   └── config.json          ← abonnements, connexions, destinataires
+    ├── mail/
+    │   └── smtp_mailer.py       ← envoi mail HTML/texte via SMTP
+    └── utils/
+        └── monitor_utils.py     ← connexion Impala, logging, mail d'erreur
+```
 
-Monitoring table Iceberg Project/
-  iceberg-monitoring/src/
-    config/config.json    → ajout de la tâche monitoring_events freshness
+---
 
+## Surveillance de `monitoring_events` elle-même
 
-CE QUI RESTE A FAIRE
----------------------
+La fraîcheur de la table `monitoring_events` est surveillée par le script KMN-61 (iceberg-monitoring).
+Une tâche a été ajoutée dans sa config :
 
-Technique :
-  - Obtenir les droits SELECT sur interne_data.monitoring_events (bclovis ou compte service)
-  - Valider avec Christophe qu'un vrai ALERTE déclenche bien le bon mail
-  - Remplacer les adresses de test par les vraies adresses de prod dans config.json
-  - Créer le repo GitLab pour GenericMonitoring
-  - Créer le .gitlab-ci.yml et configurer le cron Airflow
+```json
+{
+  "name": "monitor_monitoring_eve_freshness",
+  "flux": {
+    "sourceTable": "interne_data.monitoring_events",
+    "dateColumn": "process_date",
+    "threshold_minutes": 1
+  }
+}
+```
 
-Non-technique :
-  - Compléter la doc Wiki : https://wiki.groupe-cyllene.com/books/kamino-fonctionnelle/page/monitoring-devenements
+Si la table n'est plus alimentée → mail d'alerte KMN-61.
+
+---
+
+## Prérequis
+
+- Python 3.10+
+- `pyodbc`
+- DSN ODBC Cloudera Impala configuré sur la machine
+- Accès réseau au serveur SMTP `dagobah.leadeal-marketing.local`
+- Droits `SELECT` sur `interne_data.monitoring_events`
+
+---
+
+## Lancement
+
+```bash
+python src/main.py
+# ou avec un config alternatif
+python src/main.py --config /chemin/vers/config.json
+```
+
+---
+
+## Ce qui reste à faire
+
+- [ ] Droits SELECT sur `interne_data.monitoring_events` pour le compte de service
+- [ ] Remplacer les adresses mail de test par les vraies adresses de prod
+- [ ] Valider avec Christophe qu'un vrai ALERTE déclenche le bon mail
+- [ ] Configurer le cron Airflow
+- [ ] Compléter la [doc Wiki](https://wiki.groupe-cyllene.com/books/kamino-fonctionnelle/page/monitoring-devenements)
