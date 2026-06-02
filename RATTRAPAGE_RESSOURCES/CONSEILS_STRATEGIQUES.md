@@ -73,6 +73,88 @@ ORDER BY status DESC, source, process_date DESC
 
 Tout est dans [`src/config/config.json`](src/config/config.json) — aucun code à modifier pour ajouter un abonnement.
 
+### Exemple complet de `config.json`
+
+```json
+{
+  "project": {
+    "projectName": "Generic Monitoring",
+    "processName": "monitoring_events Subscription Alerting",
+    "environment": "preprod",
+    "logPath": "C:\\chemin\\vers\\logs\\generic_monitoring.log"
+  },
+
+  // ─── Connexions disponibles ───────────────────────────────────────────────
+  "connection": [
+    {
+      "name": "impala_ouigos3dfr",   // nom utilisé dans les abonnements
+      "protocol": "odbc",
+      "dsn": "ouigos3dfr_preprod_impala"  // nom du DSN ODBC Windows
+    },
+    {
+      "name": "ldm_smtp",
+      "protocol": "tls",
+      "server": "dagobah.leadeal-marketing.local",
+      "port": 25
+    }
+  ],
+
+  // ─── Table centrale des événements ───────────────────────────────────────
+  "monitoringEventsTable": "interne_data.monitoring_events",
+
+  // ─── Abonnements — chaque bloc = 1 mail envoyé selon des filtres ──────────
+  "subscriptions": [
+    {
+      "name": "alerte_global_cyllene",
+      "description": "Tous les ALERTE/CRITIQUE du datalake → équipe exploitation Cyllene",
+      "isActive": true,
+      "connexionName": "impala_ouigos3dfr",  // quelle BDD interroger
+      "filters": {
+        "source": null,            // null = toutes les sources sans restriction
+        "criticality": "alerte+critique",  // "tous" | "alerte+critique" | "critique"
+        "deltaHours": 24           // ne regarder que les 24 dernières heures
+      },
+      "email": {
+        "connexionName": "ldm_smtp",
+        "subject": "[ALERTE] Monitoring événements datalake",
+        "from": "LDM-IT-Exploitation@leadeal-marketing.com",
+        "to": ["cyllene-data-exploitation@groupe-cyllene.com"],
+        "cc": []
+      }
+    },
+    {
+      "name": "alerte_ouigos3dfr_critique_seulement",
+      "description": "Uniquement les CRITIQUE OuigoS3DFR → équipe Ouigo + chef de projet",
+      "isActive": true,
+      "connexionName": "impala_ouigos3dfr",
+      "filters": {
+        "source": "ouigos3dfr_crm",  // filtrer sur une source précise
+        "criticality": "critique",   // uniquement les CRITIQUE
+        "deltaHours": 6              // fenêtre plus courte : 6h
+      },
+      "email": {
+        "connexionName": "ldm_smtp",
+        "subject": "[CRITIQUE] Monitoring OuigoS3DFR CRM",
+        "from": "LDM-IT-Exploitation@leadeal-marketing.com",
+        "to": ["OuigoS3DataFR-exploitation@groupe-cyllene.com"],
+        "cc": ["chef-de-projet@exemple.com"]
+      }
+    }
+  ],
+
+  // ─── Mail envoyé en cas d'erreur technique du script lui-même ─────────────
+  "errorEmail": {
+    "connexionName": "ldm_smtp",
+    "subject": "[ERROR] Erreur technique - Generic Monitoring",
+    "from": "LDM-IT-Exploitation@leadeal-marketing.com",
+    "to": ["cyllene-data-exploitation@groupe-cyllene.com"],
+    "cc": []
+  }
+}
+```
+
+> **Note** : JSON ne supporte pas les commentaires `//` — les lignes ci-dessus sont uniquement pour la lisibilité de cette doc. Le vrai fichier n'en contient pas.
+
 ### Abonnements configurés
 
 | Nom | Source | Criticité | Fenêtre | Destinataires |
